@@ -18,7 +18,7 @@ app.use(cors());
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
 // ───────────────────────────────────────────────────────────────────────────────
-// Structured logging (single-line JSON to STDOUT for `docker compose logs -f`)
+/** Structured logging (single-line JSON to STDOUT for `docker compose logs -f`) */
 // ───────────────────────────────────────────────────────────────────────────────
 const safePreview = (obj) => {
   try {
@@ -41,7 +41,6 @@ app.use((req, res, next) => {
     const end = process.hrtime.bigint();
     const durationMs = Number(end - start) / 1e6;
 
-    // One-line JSON log per completed request
     console.log(
       JSON.stringify({
         t: new Date().toISOString(),
@@ -114,7 +113,6 @@ if (!fs.existsSync(uploadDir)) fs.mkdirSync(uploadDir, { recursive: true });
 const storage = multer.diskStorage({
   destination: (_req, _file, cb) => cb(null, uploadDir),
   filename: (_req, file, cb) => {
-    // sanitize filename a little
     const base = path.basename(file.originalname).replace(/[^a-zA-Z0-9._-]/g, '_');
     cb(null, `${Date.now()}-${base}`);
   },
@@ -191,67 +189,62 @@ async function createGithubIssue({ title, body, labels }) {
 }
 
 // ───────────────────────────────────────────────────────────────────────────────
-// POST /report
-// Accepts JSON OR multipart/form-data with optional file `attachment`
-// JSON fields suggested by a Unity bug proxy:
-//   - title (string, required)
-//   - description (string)
-//   - playerEmail (string)
-//   - labels (array<string>)
-//   - metadata (object) (e.g., platform, gameVersion, scene, device info, etc.)
+// Core handler used by both /report and /submit-bug
 // ───────────────────────────────────────────────────────────────────────────────
-app.post('/report', upload.single('attachment'), async (req, res) => {
+const reportHandler = async (req, res) => {
   try {
     const isMultipart = req.is('multipart/form-data');
-    const body = isMultipart ? req.body : req.body || {};
+    const body = isMultipart ? req.body : (req.body || {});
 
+    // Base fields (always allowed)
     const title = (body.title || '').toString().trim() || 'Unity Bug Report';
     const description = (body.description || '').toString();
-    const playerEmail = (body.playerEmail || '').toString();
-    const labels = Array.isArray(body.labels)
+
+    // Optional Unity fields (only included if provided)
+    const issueType = body.issueType ? String(body.issueType) : undefined;     // e.g., "bug"
+    const screenshotUrl = body.screenshotUrl ? String(body.screenshotUrl) : undefined;
+    const systemInfo = body.systemInfo ? String(body.systemInfo) : undefined;
+    const userToken = body.userToken ? String(body.userToken) : undefined;
+
+    // Labels: use provided labels, else fall back to issueType, else 'bug'
+    let labels = Array.isArray(body.labels)
       ? body.labels
       : (typeof body.labels === 'string' && body.labels.length > 0 ? [body.labels] : []);
+    if ((!labels || labels.length === 0) && issueType) labels = [issueType];
+    if (!labels || labels.length === 0) labels = ['bug'];
 
-    // Parse metadata if it looks like JSON in multipart
-    let metadata = {};
-    if (typeof body.metadata === 'string') {
-      try { metadata = JSON.parse(body.metadata); } catch { metadata = { raw: body.metadata }; }
-    } else if (body.metadata && typeof body.metadata === 'object') {
-      metadata = body.metadata;
-    }
-
+    // Optional uploaded attachment via multipart
     const attachment = req.file || null;
     const attachmentUrl = attachment ? `/uploads/${attachment.filename}` : null;
 
-    // Build a clear GitHub issue body
+    // Build the GitHub issue body — NO sensitive metadata
     const mdSections = [];
 
-    if (description) {
-      mdSections.push(`### Description\n${description}`);
-    }
+    if (description) mdSections.push(`### Description\n${description}`);
 
-    if (playerEmail) {
-      mdSections.push(`**Player Email:** \`${playerEmail}\``);
+    if (screenshotUrl) {
+      mdSections.push(`### Screenshot\n${screenshotUrl}`);
     }
 
     if (attachmentUrl) {
-      // Note: this is a link to your server; ensure it’s reachable from GitHub viewers
       mdSections.push(`### Attachment\n[Download attachment](${attachmentUrl})`);
     }
 
-    const metaForIssue = {
-      ...metadata,
-      request_id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-      user_agent: req.headers['user-agent'],
-      ip: req.headers['x-forwarded-for'] || req.socket?.remoteAddress,
-      content_type: req.headers['content-type'],
-    };
+    if (systemInfo) {
+      mdSections.push(`### System Info\n\`\`\`\n${systemInfo}\n\`\`\``);
+    }
 
-    mdSections.push(
-      '### Metadata\n' +
-      '```json\n' +
-      JSON.stringify(metaForIssue, null, 2) +
-      '\n```'
+    // We intentionally DO NOT add metadata (IP, UA, etc.) to the issue body.
+    // Keep a small internal log line for observability only:
+    console.log(
+      JSON.stringify({
+        t: new Date().toISOString(),
+        level: 'info',
+        msg: 'report_received',
+        label_hint: issueType || null,
+        user_token_present: Boolean(userToken),
+        screenshot_present: Boolean(screenshotUrl || attachmentUrl),
+      })
     );
 
     const issueBody = mdSections.join('\n\n');
@@ -259,13 +252,14 @@ app.post('/report', upload.single('attachment'), async (req, res) => {
     const issue = await createGithubIssue({
       title,
       body: issueBody,
-      labels: labels.length ? labels : ['bug'],
+      labels,
     });
 
     res.json({
       success: true,
       issue_url: issue.html_url,
       issue_number: issue.number,
+      // we also don’t echo back sensitive metadata
       attachment: attachment ? { name: attachment.originalname, url: attachmentUrl } : null,
     });
   } catch (err) {
@@ -288,7 +282,11 @@ app.post('/report', upload.single('attachment'), async (req, res) => {
 
     res.status(status).json({ error: 'Failed to create GitHub issue' });
   }
-});
+};
+
+// Wire the routes
+app.post('/report', upload.single('attachment'), reportHandler);
+app.post('/submit-bug', upload.single('attachment'), reportHandler); // compat alias for Unity client
 
 // ───────────────────────────────────────────────────────────────────────────────
 // Start the server
