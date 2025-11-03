@@ -141,4 +141,4 @@ Verify your `GITHUB_TOKEN` in `docker-compose.yml` has `repo` scope and is valid
 
 ## License
 
-ISC
+it's a fucking javascript web server who cares
