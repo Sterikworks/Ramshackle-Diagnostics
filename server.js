@@ -329,7 +329,7 @@ const reportHandler = async (req, res) => {
         msg: 'report_received',
         label_hint: issueType || null,
         user_token_present: Boolean(userToken),
-        screenshot_present: Boolean(screenshotUrl || attachmentUrl),
+        debug_logs_present: Boolean(debugLogsUrl),
       })
     );
 
