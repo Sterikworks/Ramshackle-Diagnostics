@@ -345,8 +345,8 @@ const reportHandler = async (req, res) => {
       success: true,
       issue_url: issue.html_url,
       issue_number: issue.number,
-      // we also don’t echo back sensitive metadata
-      attachment: attachment ? { name: attachment.originalname, url: attachmentUrl } : null,
+      // Debug logs are stored as a Gist on GitHub
+      debug_logs_url: debugLogsUrl || null,
     });
   } catch (err) {
     const status = err?.response?.status || 500;
