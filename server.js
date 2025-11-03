@@ -309,14 +309,14 @@ const reportHandler = async (req, res) => {
     }
 
     // Build the GitHub issue body — NO sensitive metadata
-    // Order: System Info first (for Discord embeds), then Description, Screenshot, Debug Logs
+    // Order: Description, System Info, Screenshot, Debug Logs
     const mdSections = [];
+
+    if (description) mdSections.push(`### Description\n${description}`);
 
     if (systemInfo) {
       mdSections.push(`<details open>\n<summary><strong>System Info</strong></summary>\n\n\`\`\`\n${systemInfo}\n\`\`\`\n\n</details>`);
     }
-
-    if (description) mdSections.push(`### Description\n${description}`);
 
     if (screenshotUrl) {
       mdSections.push(`## Screenshot\n\n![Screenshot](${screenshotUrl})`);
