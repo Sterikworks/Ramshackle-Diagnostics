@@ -12,7 +12,8 @@ services:
       - GITHUB_REPO=Sterikworks/Ramshackle_Issues        # GitHub repo for issues
     volumes:
       # Persist uploaded files
-      - ./uploads:/app/uploads
+      - ./uploads:/app/uploads:rw
+    user: "node"
     healthcheck:
       test: ["CMD", "node", "-e", "require('http').get('http://localhost:5000/health', (r) => {process.exit(r.statusCode === 200 ? 0 : 1)})"]
       interval: 30s
