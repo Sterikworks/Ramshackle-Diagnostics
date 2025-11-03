@@ -146,6 +146,55 @@ app.get('/health', (_req, res) => {
 });
 
 // ───────────────────────────────────────────────────────────────────────────────
+// Helper: create GitHub Gist (for large debug logs)
+// ───────────────────────────────────────────────────────────────────────────────
+async function createGithubGist({ filename, content, description }) {
+  if (!GITHUB_TOKEN) {
+    throw new Error('GitHub token missing (GITHUB_TOKEN)');
+  }
+
+  const url = 'https://api.github.com/gists';
+  console.log(
+    JSON.stringify({
+      t: new Date().toISOString(),
+      level: 'info',
+      msg: 'create_gist_attempt',
+      filename,
+    })
+  );
+
+  const resp = await axios.post(
+    url,
+    {
+      description: description || 'Bug Report Debug Logs',
+      public: false,
+      files: {
+        [filename]: { content },
+      },
+    },
+    {
+      headers: {
+        Authorization: `token ${GITHUB_TOKEN}`,
+        'User-Agent': 'UnityBugReporter',
+        Accept: 'application/vnd.github+json',
+      },
+    }
+  );
+
+  console.log(
+    JSON.stringify({
+      t: new Date().toISOString(),
+      level: 'info',
+      msg: 'create_gist_success',
+      gist_id: resp.data?.id,
+      gist_url: resp.data?.html_url,
+    })
+  );
+
+  return resp.data;
+}
+
+// ───────────────────────────────────────────────────────────────────────────────
 // Helper: create GitHub issue
 // ───────────────────────────────────────────────────────────────────────────────
 async function createGithubIssue({ title, body, labels }) {
@@ -216,7 +265,43 @@ const reportHandler = async (req, res) => {
 
     // Optional uploaded attachment via multipart
     const attachment = req.file || null;
-    const attachmentUrl = attachment ? `/uploads/${attachment.filename}` : null;
+    let debugLogsUrl = null;
+    
+    if (attachment) {
+      try {
+        // Read the debug logs file
+        const debugContent = fs.readFileSync(attachment.path, 'utf-8');
+        
+        // Create a Gist for the debug logs
+        const gist = await createGithubGist({
+          filename: attachment.originalname,
+          content: debugContent,
+          description: `Debug logs from bug report: ${title}`,
+        });
+        
+        debugLogsUrl = gist.html_url;
+        
+        console.log(
+          JSON.stringify({
+            t: new Date().toISOString(),
+            level: 'info',
+            msg: 'debug_logs_gist_created',
+            filename: attachment.originalname,
+            gist_url: debugLogsUrl,
+          })
+        );
+      } catch (err) {
+        console.error(
+          JSON.stringify({
+            t: new Date().toISOString(),
+            level: 'error',
+            msg: 'failed_to_create_gist',
+            filename: attachment?.originalname,
+            error: err.message,
+          })
+        );
+      }
+    }
 
     // Build the GitHub issue body — NO sensitive metadata
     const mdSections = [];
@@ -227,8 +312,8 @@ const reportHandler = async (req, res) => {
       mdSections.push(`### Screenshot\n${screenshotUrl}`);
     }
 
-    if (attachmentUrl) {
-      mdSections.push(`### Attachment\n[Download attachment](${attachmentUrl})`);
+    if (debugLogsUrl) {
+      mdSections.push(`### Debug Logs\n[View debug logs on Gist](${debugLogsUrl})`);
     }
 
     if (systemInfo) {
