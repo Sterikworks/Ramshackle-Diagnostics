@@ -11,7 +11,8 @@ const fs = require('fs');
 // Express setup
 // ───────────────────────────────────────────────────────────────────────────────
 const app = express();
-app.use(express.json({ limit: '10mb' }));
+app.use(express.json({ limit: '50mb' }));
+app.use(express.urlencoded({ limit: '50mb', extended: true }));
 app.use(cors());
 
 // serve uploaded files (useful if your server is reachable publicly)
@@ -134,7 +135,7 @@ const fileFilter = (_req, file, cb) => {
 const upload = multer({
   storage,
   fileFilter,
-  limits: { fileSize: 10 * 1024 * 1024 }, // 10MB
+  limits: { fileSize: 100 * 1024 * 1024 }, // 100MB
 });
 
 // ───────────────────────────────────────────────────────────────────────────────
@@ -221,6 +222,15 @@ const reportHandler = async (req, res) => {
     if (attachment) {
       try {
         debugLogs = fs.readFileSync(attachment.path, 'utf-8');
+        console.log(
+          JSON.stringify({
+            t: new Date().toISOString(),
+            level: 'info',
+            msg: 'attachment_read_success',
+            filename: attachment.filename,
+            size: debugLogs.length,
+          })
+        );
       } catch (err) {
         console.error(
           JSON.stringify({
@@ -310,6 +320,26 @@ const reportHandler = async (req, res) => {
 // Wire the routes
 app.post('/report', upload.single('attachment'), reportHandler);
 app.post('/submit-bug', upload.single('attachment'), reportHandler); // compat alias for Unity client
+
+// Error handling middleware for multer errors
+app.use((err, req, res, next) => {
+  console.error(
+    JSON.stringify({
+      t: new Date().toISOString(),
+      level: 'error',
+      msg: 'multer_or_request_error',
+      error: err.message,
+      code: err.code,
+      status: err.status || 500,
+    })
+  );
+
+  if (err.code === 'UNSUPPORTED_FILE_TYPE') {
+    return res.status(400).json({ error: err.message });
+  }
+
+  res.status(500).json({ error: 'Internal server error' });
+});
 
 // ───────────────────────────────────────────────────────────────────────────────
 // Start the server
