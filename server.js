@@ -315,7 +315,7 @@ const reportHandler = async (req, res) => {
     if (description) mdSections.push(`### Description\n${description}`);
 
     if (systemInfo) {
-      mdSections.push(`<details open>\n<summary><strong>System Info</strong></summary>\n\n\`\`\`\n${systemInfo}\n\`\`\`\n\n</details>`);
+      mdSections.push(`<details>\n<summary><strong>System Info</strong></summary>\n\n\`\`\`\n${systemInfo}\n\`\`\`\n\n</details>`);
     }
 
     if (screenshotUrl) {
