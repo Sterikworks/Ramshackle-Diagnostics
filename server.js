@@ -216,34 +216,6 @@ const reportHandler = async (req, res) => {
 
     // Optional uploaded attachment via multipart
     const attachment = req.file || null;
-    let debugLogs = undefined;
-    
-    // If attachment exists, read it as debug logs
-    if (attachment) {
-      try {
-        debugLogs = fs.readFileSync(attachment.path, 'utf-8');
-        console.log(
-          JSON.stringify({
-            t: new Date().toISOString(),
-            level: 'info',
-            msg: 'attachment_read_success',
-            filename: attachment.filename,
-            size: debugLogs.length,
-          })
-        );
-      } catch (err) {
-        console.error(
-          JSON.stringify({
-            t: new Date().toISOString(),
-            level: 'error',
-            msg: 'failed_to_read_attachment',
-            filename: attachment.filename,
-            error: err.message,
-          })
-        );
-      }
-    }
-
     const attachmentUrl = attachment ? `/uploads/${attachment.filename}` : null;
 
     // Build the GitHub issue body — NO sensitive metadata
@@ -261,10 +233,6 @@ const reportHandler = async (req, res) => {
 
     if (systemInfo) {
       mdSections.push(`### System Info\n\`\`\`\n${systemInfo}\n\`\`\``);
-    }
-
-    if (debugLogs) {
-      mdSections.push(`### Debug Logs\n\`\`\`\n${debugLogs}\n\`\`\``);
     }
 
     // We intentionally DO NOT add metadata (IP, UA, etc.) to the issue body.
@@ -306,6 +274,7 @@ const reportHandler = async (req, res) => {
         msg: 'report_failed',
         status,
         error: typeof detail === 'string' ? detail : JSON.stringify(detail),
+        stack: err?.stack,
       })
     );
 

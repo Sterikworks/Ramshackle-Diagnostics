@@ -12,8 +12,10 @@ RUN npm install --omit=dev
 # Copy application files
 COPY server.js ./
 
-# Create uploads directory
-RUN mkdir -p uploads && chown -R node:node /app
+# Create uploads directory with proper permissions
+RUN mkdir -p uploads && \
+    chown -R node:node /app && \
+    chmod -R 755 /app/uploads
 
 # Run as non-root user
 USER node
