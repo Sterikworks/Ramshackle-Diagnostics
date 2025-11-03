@@ -262,6 +262,10 @@ const reportHandler = async (req, res) => {
       : (typeof body.labels === 'string' && body.labels.length > 0 ? [body.labels] : []);
     if ((!labels || labels.length === 0) && issueType) labels = [issueType];
     if (!labels || labels.length === 0) labels = ['bug'];
+    
+    // Add meta labels for screenshot and debug logs
+    if (screenshotUrl) labels.push('has-screenshot');
+    if (attachment) labels.push('has-debug-logs');
 
     // Optional uploaded attachment via multipart
     const attachment = req.file || null;
@@ -304,20 +308,21 @@ const reportHandler = async (req, res) => {
     }
 
     // Build the GitHub issue body — NO sensitive metadata
+    // Order: System Info first (for Discord embeds), then Description, Screenshot, Debug Logs
     const mdSections = [];
+
+    if (systemInfo) {
+      mdSections.push(`<details open>\n<summary><strong>System Info</strong></summary>\n\n\`\`\`\n${systemInfo}\n\`\`\`\n\n</details>`);
+    }
 
     if (description) mdSections.push(`### Description\n${description}`);
 
     if (screenshotUrl) {
-      mdSections.push(`### Screenshot\n${screenshotUrl}`);
+      mdSections.push(`## Screenshot\n\n![Screenshot](${screenshotUrl})`);
     }
 
     if (debugLogsUrl) {
-      mdSections.push(`### Debug Logs\n[View debug logs on Gist](${debugLogsUrl})`);
-    }
-
-    if (systemInfo) {
-      mdSections.push(`### System Info\n\`\`\`\n${systemInfo}\n\`\`\``);
+      mdSections.push(`[View debug logs on Gist](${debugLogsUrl})`);
     }
 
     // We intentionally DO NOT add metadata (IP, UA, etc.) to the issue body.
