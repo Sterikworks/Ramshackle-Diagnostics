@@ -256,6 +256,9 @@ const reportHandler = async (req, res) => {
     const systemInfo = body.systemInfo ? String(body.systemInfo) : undefined;
     const userToken = body.userToken ? String(body.userToken) : undefined;
 
+    // Optional uploaded attachment via multipart (declare early so we can use it in labels)
+    const attachment = req.file || null;
+
     // Labels: use provided labels, else fall back to issueType, else 'bug'
     let labels = Array.isArray(body.labels)
       ? body.labels
@@ -267,8 +270,6 @@ const reportHandler = async (req, res) => {
     if (screenshotUrl) labels.push('has-screenshot');
     if (attachment) labels.push('has-debug-logs');
 
-    // Optional uploaded attachment via multipart
-    const attachment = req.file || null;
     let debugLogsUrl = null;
     
     if (attachment) {
