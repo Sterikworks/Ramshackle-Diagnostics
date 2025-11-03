@@ -15,7 +15,7 @@ COPY server.js ./
 # Create uploads directory with proper permissions
 RUN mkdir -p uploads && \
     chown -R node:node /app && \
-    chmod -R 755 /app/uploads
+    chmod -R 777 /app/uploads
 
 # Run as non-root user
 USER node
