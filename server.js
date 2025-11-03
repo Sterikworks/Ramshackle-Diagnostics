@@ -193,8 +193,8 @@ async function createGithubIssue({ title, body, labels }) {
 // ───────────────────────────────────────────────────────────────────────────────
 const reportHandler = async (req, res) => {
   try {
-    const isMultipart = req.is('multipart/form-data');
-    const body = isMultipart ? req.body : (req.body || {});
+    // Extract form fields (multipart) or JSON body
+    const body = req.body || {};
 
     // Base fields (always allowed)
     const title = (body.title || '').toString().trim() || 'Unity Bug Report';
@@ -215,6 +215,25 @@ const reportHandler = async (req, res) => {
 
     // Optional uploaded attachment via multipart
     const attachment = req.file || null;
+    let debugLogs = undefined;
+    
+    // If attachment exists, read it as debug logs
+    if (attachment) {
+      try {
+        debugLogs = fs.readFileSync(attachment.path, 'utf-8');
+      } catch (err) {
+        console.error(
+          JSON.stringify({
+            t: new Date().toISOString(),
+            level: 'error',
+            msg: 'failed_to_read_attachment',
+            filename: attachment.filename,
+            error: err.message,
+          })
+        );
+      }
+    }
+
     const attachmentUrl = attachment ? `/uploads/${attachment.filename}` : null;
 
     // Build the GitHub issue body — NO sensitive metadata
@@ -232,6 +251,10 @@ const reportHandler = async (req, res) => {
 
     if (systemInfo) {
       mdSections.push(`### System Info\n\`\`\`\n${systemInfo}\n\`\`\``);
+    }
+
+    if (debugLogs) {
+      mdSections.push(`### Debug Logs\n\`\`\`\n${debugLogs}\n\`\`\``);
     }
 
     // We intentionally DO NOT add metadata (IP, UA, etc.) to the issue body.
