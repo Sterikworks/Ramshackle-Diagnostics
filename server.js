@@ -274,7 +274,7 @@ const reportHandler = async (req, res) => {
     const userToken = body.userToken ? String(body.userToken) : undefined;
 
     // Optional uploaded attachment via multipart (declare early so we can use it in labels)
-    const attachment = req.file || null;
+    const attachment = (req.files?.attachment && req.files.attachment[0]) || null;
 
     // Log parsed fields
     console.log(
@@ -410,9 +410,21 @@ const reportHandler = async (req, res) => {
   }
 };
 
+// Configure multer to accept text fields + one file
+const uploadWithFields = upload.fields([
+  { name: 'attachment', maxCount: 1 },
+  { name: 'title', maxCount: 0 },
+  { name: 'description', maxCount: 0 },
+  { name: 'issueType', maxCount: 0 },
+  { name: 'screenshotUrl', maxCount: 0 },
+  { name: 'systemInfo', maxCount: 0 },
+  { name: 'userToken', maxCount: 0 },
+  { name: 'labels', maxCount: 0 },
+]);
+
 // Wire the routes
-app.post('/report', upload.single('attachment'), reportHandler);
-app.post('/submit-bug', upload.single('attachment'), reportHandler); // compat alias for Unity client
+app.post('/report', uploadWithFields, reportHandler);
+app.post('/submit-bug', uploadWithFields, reportHandler); // compat alias for Unity client
 
 // Error handling middleware for multer errors
 app.use((err, req, res, next) => {
