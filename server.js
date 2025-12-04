@@ -257,9 +257,8 @@ const reportHandler = async (req, res) => {
         msg: 'bug_report_received',
         content_type: req.headers['content-type'],
         body_keys: Object.keys(body),
-        has_file: Boolean(req.file),
-        file_name: req.file?.originalname,
-        file_size: req.file?.size,
+        files_count: req.files ? req.files.length : 0,
+        files_list: req.files ? req.files.map(f => ({ name: f.fieldname, originalname: f.originalname, size: f.size })) : [],
       })
     );
 
@@ -274,7 +273,8 @@ const reportHandler = async (req, res) => {
     const userToken = body.userToken ? String(body.userToken) : undefined;
 
     // Optional uploaded attachment via multipart (declare early so we can use it in labels)
-    const attachment = (req.files?.attachment && req.files.attachment[0]) || null;
+    // With upload.any(), files are in req.files array
+    const attachment = (req.files && req.files.length > 0) ? req.files[0] : null;
 
     // Log parsed fields
     console.log(
@@ -411,16 +411,8 @@ const reportHandler = async (req, res) => {
 };
 
 // Configure multer to accept text fields + one file
-const uploadWithFields = upload.fields([
-  { name: 'attachment', maxCount: 1 },
-  { name: 'title', maxCount: 0 },
-  { name: 'description', maxCount: 0 },
-  { name: 'issueType', maxCount: 0 },
-  { name: 'screenshotUrl', maxCount: 0 },
-  { name: 'systemInfo', maxCount: 0 },
-  { name: 'userToken', maxCount: 0 },
-  { name: 'labels', maxCount: 0 },
-]);
+// Using .any() to accept all fields, then we'll parse what we need
+const uploadWithFields = upload.any();
 
 // Wire the routes
 app.post('/report', uploadWithFields, reportHandler);
