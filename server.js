@@ -123,14 +123,13 @@ const storage = multer.diskStorage({
 });
 
 const ALLOWED_EXTS = new Set([
-  '.png', '.jpg', '.jpeg', '.gif', '.webp',
-  '.vessel', '.txt', '.log', '.zip', '.gz', '.json'
+  '.png', '.jpg', '.jpeg', '.gif', '.webp'
 ]);
 
 const fileFilter = (_req, file, cb) => {
   const ext = path.extname(file.originalname).toLowerCase();
   if (ALLOWED_EXTS.has(ext)) return cb(null, true);
-  const error = new Error(`Unsupported file type: ${ext}`);
+  const error = new Error(`Only image files allowed (PNG, JPG, GIF, WebP). Got: ${ext}`);
   error.code = 'UNSUPPORTED_FILE_TYPE';
   cb(error);
 };
@@ -265,6 +264,7 @@ const reportHandler = async (req, res) => {
     // Base fields (always allowed)
     const title = (body.title || '').toString().trim() || 'Unity Bug Report';
     const description = (body.description || '').toString();
+    const reporterName = body.reporterName ? String(body.reporterName).trim() : undefined;
 
     // Optional Unity fields (only included if provided)
     const issueType = body.issueType ? String(body.issueType) : undefined;     // e.g., "bug"
@@ -284,6 +284,7 @@ const reportHandler = async (req, res) => {
         msg: 'bug_report_parsed_fields',
         title_length: title.length,
         description_length: description.length,
+        reporter_name: reporterName,
         has_issue_type: Boolean(issueType),
         has_screenshot_url: Boolean(screenshotUrl),
         has_system_info: Boolean(systemInfo),
@@ -342,8 +343,12 @@ const reportHandler = async (req, res) => {
     }
 
     // Build the GitHub issue body — NO sensitive metadata
-    // Order: Description, System Info, Screenshot, Debug Logs
+    // Order: Reporter, Description, System Info, Screenshot, Debug Logs
     const mdSections = [];
+
+    if (reporterName) {
+      mdSections.push(`**Reported by:** ${reporterName}`);
+    }
 
     if (description) mdSections.push(`### Description\n${description}`);
 
