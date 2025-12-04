@@ -123,13 +123,14 @@ const storage = multer.diskStorage({
 });
 
 const ALLOWED_EXTS = new Set([
-  '.png', '.jpg', '.jpeg', '.gif', '.webp'
+  '.png', '.jpg', '.jpeg', '.gif', '.webp',
+  '.txt', '.log'
 ]);
 
 const fileFilter = (_req, file, cb) => {
   const ext = path.extname(file.originalname).toLowerCase();
   if (ALLOWED_EXTS.has(ext)) return cb(null, true);
-  const error = new Error(`Only image files allowed (PNG, JPG, GIF, WebP). Got: ${ext}`);
+  const error = new Error(`Only image files (PNG, JPG, GIF, WebP) and debug logs (.txt, .log) allowed. Got: ${ext}`);
   error.code = 'UNSUPPORTED_FILE_TYPE';
   cb(error);
 };
