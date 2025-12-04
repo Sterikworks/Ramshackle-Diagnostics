@@ -42,6 +42,9 @@ app.use((req, res, next) => {
     const end = process.hrtime.bigint();
     const durationMs = Number(end - start) / 1e6;
 
+    // Skip logging health check requests (too noisy)
+    if ((req.originalUrl || req.url) === '/health') return;
+
     console.log(
       JSON.stringify({
         t: new Date().toISOString(),
@@ -246,6 +249,20 @@ const reportHandler = async (req, res) => {
     // Extract form fields (multipart) or JSON body
     const body = req.body || {};
 
+    // Log incoming request details
+    console.log(
+      JSON.stringify({
+        t: new Date().toISOString(),
+        level: 'info',
+        msg: 'bug_report_received',
+        content_type: req.headers['content-type'],
+        body_keys: Object.keys(body),
+        has_file: Boolean(req.file),
+        file_name: req.file?.originalname,
+        file_size: req.file?.size,
+      })
+    );
+
     // Base fields (always allowed)
     const title = (body.title || '').toString().trim() || 'Unity Bug Report';
     const description = (body.description || '').toString();
@@ -258,6 +275,22 @@ const reportHandler = async (req, res) => {
 
     // Optional uploaded attachment via multipart (declare early so we can use it in labels)
     const attachment = req.file || null;
+
+    // Log parsed fields
+    console.log(
+      JSON.stringify({
+        t: new Date().toISOString(),
+        level: 'info',
+        msg: 'bug_report_parsed_fields',
+        title_length: title.length,
+        description_length: description.length,
+        has_issue_type: Boolean(issueType),
+        has_screenshot_url: Boolean(screenshotUrl),
+        has_system_info: Boolean(systemInfo),
+        has_user_token: Boolean(userToken),
+        has_attachment: Boolean(attachment),
+      })
+    );
 
     // Labels: use provided labels, else fall back to issueType, else 'bug'
     let labels = Array.isArray(body.labels)
