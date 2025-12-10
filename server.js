@@ -18,6 +18,66 @@ app.use(cors());
 // serve uploaded files (useful if your server is reachable publicly)
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
+// Debug endpoint: list uploaded files (BEFORE error handling middleware)
+app.get('/uploads-list', (_req, res) => {
+  try {
+    const listDir = (dir, prefix = '') => {
+      const files = [];
+      if (!fs.existsSync(dir)) return files;
+      
+      const entries = fs.readdirSync(dir);
+      entries.forEach(entry => {
+        const fullPath = path.join(dir, entry);
+        const stat = fs.statSync(fullPath);
+        if (stat.isDirectory()) {
+          files.push(...listDir(fullPath, prefix + entry + '/'));
+        } else {
+          files.push(prefix + entry + ` (${stat.size} bytes)`);
+        }
+      });
+      return files;
+    };
+    
+    const files = listDir(uploadDir);
+    res.json({ upload_dir: uploadDir, files });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Download endpoint for uploaded files
+app.get('/download/:type/:filename', (req, res) => {
+  try {
+    const { type, filename } = req.params;
+    const validTypes = ['blueprints', 'logs', 'images', 'misc'];
+    
+    if (!validTypes.includes(type)) {
+      return res.status(400).json({ error: 'Invalid file type' });
+    }
+    
+    // Prevent directory traversal
+    if (filename.includes('..') || filename.includes('/')) {
+      return res.status(400).json({ error: 'Invalid filename' });
+    }
+    
+    const filePath = path.join(uploadDir, type, filename);
+    
+    // Verify file exists and is within uploads directory
+    if (!fs.existsSync(filePath)) {
+      return res.status(404).json({ error: 'File not found' });
+    }
+    
+    const realPath = fs.realpathSync(filePath);
+    if (!realPath.startsWith(fs.realpathSync(uploadDir))) {
+      return res.status(400).json({ error: 'Invalid file path' });
+    }
+    
+    res.download(filePath);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // ───────────────────────────────────────────────────────────────────────────────
 /** Structured logging (single-line JSON to STDOUT for `docker compose logs -f`) */
 // ───────────────────────────────────────────────────────────────────────────────
@@ -161,6 +221,33 @@ const upload = multer({
 // ───────────────────────────────────────────────────────────────────────────────
 app.get('/health', (_req, res) => {
   res.status(200).json({ ok: true });
+});
+
+// Debug endpoint: list uploaded files
+app.get('/uploads-list', (_req, res) => {
+  try {
+    const listDir = (dir, prefix = '') => {
+      const files = [];
+      if (!fs.existsSync(dir)) return files;
+      
+      const entries = fs.readdirSync(dir);
+      entries.forEach(entry => {
+        const fullPath = path.join(dir, entry);
+        const stat = fs.statSync(fullPath);
+        if (stat.isDirectory()) {
+          files.push(...listDir(fullPath, prefix + entry + '/'));
+        } else {
+          files.push(prefix + entry + ` (${stat.size} bytes)`);
+        }
+      });
+      return files;
+    };
+    
+    const files = listDir(uploadDir);
+    res.json({ upload_dir: uploadDir, files });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
 // ───────────────────────────────────────────────────────────────────────────────
@@ -339,7 +426,7 @@ const reportHandler = async (req, res) => {
     
     // Handle blueprint file
     if (blueprintFile) {
-      blueprintUrl = `/uploads/blueprints/${blueprintFile.filename}`;
+      blueprintUrl = `/download/blueprints/${blueprintFile.filename}`;
       
       console.log(
         JSON.stringify({
