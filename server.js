@@ -295,7 +295,8 @@ async function pushBlueprintToGithub({ blueprintPath, blueprintName, issueNumber
       }
     );
     
-    const githubBlueprintUrl = `https://github.com/${GITHUB_REPO}/blob/main/${filePath}`;
+    const encodedFilePath = filePath.split('/').map(encodeURIComponent).join('/');
+    const githubBlueprintUrl = `https://github.com/${GITHUB_REPO}/blob/main/${encodedFilePath}`;
     
     console.log(
       JSON.stringify({
@@ -598,12 +599,12 @@ const reportHandler = async (req, res) => {
           issueNumber: issue.number,
         });
         
-        // Update the issue with the blueprint link as a comment
-        await axios.post(
-          `https://api.github.com/repos/${GITHUB_REPO}/issues/${issue.number}/comments`,
-          {
-            body: `**Vessel Blueprint:** [Download](${blueprintUrl})`,
-          },
+        // Update the issue body to include the blueprint link
+        const updatedBody = issueBody + '\n\n**Vessel Blueprint:** [Download](' + blueprintUrl + ')';
+        
+        await axios.patch(
+          `https://api.github.com/repos/${GITHUB_REPO}/issues/${issue.number}`,
+          { body: updatedBody },
           {
             headers: {
               Authorization: `token ${GITHUB_TOKEN}`,
@@ -617,7 +618,7 @@ const reportHandler = async (req, res) => {
           JSON.stringify({
             t: new Date().toISOString(),
             level: 'info',
-            msg: 'blueprint_comment_added',
+            msg: 'blueprint_added_to_issue',
             issue_number: issue.number,
             blueprint_url: blueprintUrl,
           })
