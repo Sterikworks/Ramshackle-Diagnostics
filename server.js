@@ -290,7 +290,19 @@ const reportHandler = async (req, res) => {
 
     // Optional uploaded attachment via multipart (declare early so we can use it in labels)
     // With upload.any(), files are in req.files array
-    const attachment = (req.files && req.files.length > 0) ? req.files[0] : null;
+    // Separate blueprint and debug log files
+    let blueprintFile = null;
+    let debugLogFile = null;
+    
+    if (req.files && req.files.length > 0) {
+      req.files.forEach(file => {
+        if (file.originalname.toLowerCase().endsWith('.blueprint')) {
+          blueprintFile = file;
+        } else if (file.originalname.toLowerCase().endsWith('.txt') || file.originalname.toLowerCase().endsWith('.log')) {
+          debugLogFile = file;
+        }
+      });
+    }
 
     // Log parsed fields
     console.log(
@@ -305,7 +317,8 @@ const reportHandler = async (req, res) => {
         has_screenshot_url: Boolean(screenshotUrl),
         has_system_info: Boolean(systemInfo),
         has_user_token: Boolean(userToken),
-        has_attachment: Boolean(attachment),
+        has_blueprint: Boolean(blueprintFile),
+        has_debug_logs: Boolean(debugLogFile),
       })
     );
 
@@ -316,66 +329,64 @@ const reportHandler = async (req, res) => {
     if ((!labels || labels.length === 0) && issueType) labels = [issueType];
     if (!labels || labels.length === 0) labels = ['bug'];
     
-    // Add meta labels for screenshot and debug logs
+    // Add meta labels for screenshot and attachments
     if (screenshotUrl) labels.push('has-screenshot');
-    if (attachment) labels.push('has-debug-logs');
+    if (blueprintFile) labels.push('has-blueprint');
+    if (debugLogFile) labels.push('has-debug-logs');
 
     let debugLogsUrl = null;
     let blueprintUrl = null;
     
-    if (attachment) {
-      const isBlueprint = attachment.originalname.toLowerCase().endsWith('.blueprint');
+    // Handle blueprint file
+    if (blueprintFile) {
+      blueprintUrl = `/uploads/blueprints/${blueprintFile.filename}`;
       
-      if (isBlueprint) {
-        // Handle blueprint file
-        blueprintUrl = `/uploads/blueprints/${attachment.filename}`;
-        labels.push('has-blueprint');
+      console.log(
+        JSON.stringify({
+          t: new Date().toISOString(),
+          level: 'info',
+          msg: 'blueprint_file_saved',
+          filename: blueprintFile.originalname,
+          size: blueprintFile.size,
+          path: blueprintUrl,
+        })
+      );
+    }
+    
+    // Handle debug logs file
+    if (debugLogFile) {
+      try {
+        // Read the debug logs file
+        const debugContent = fs.readFileSync(debugLogFile.path, 'utf-8');
+        
+        // Create a Gist for the debug logs
+        const gist = await createGithubGist({
+          filename: debugLogFile.originalname,
+          content: debugContent,
+          description: `Debug logs from bug report: ${title}`,
+        });
+        
+        debugLogsUrl = gist.html_url;
         
         console.log(
           JSON.stringify({
             t: new Date().toISOString(),
             level: 'info',
-            msg: 'blueprint_file_saved',
-            filename: attachment.originalname,
-            size: attachment.size,
-            path: blueprintUrl,
+            msg: 'debug_logs_gist_created',
+            filename: debugLogFile.originalname,
+            gist_url: debugLogsUrl,
           })
         );
-      } else {
-        // Handle debug logs file
-        try {
-          // Read the debug logs file
-          const debugContent = fs.readFileSync(attachment.path, 'utf-8');
-          
-          // Create a Gist for the debug logs
-          const gist = await createGithubGist({
-            filename: attachment.originalname,
-            content: debugContent,
-            description: `Debug logs from bug report: ${title}`,
-          });
-          
-          debugLogsUrl = gist.html_url;
-          
-          console.log(
-            JSON.stringify({
-              t: new Date().toISOString(),
-              level: 'info',
-              msg: 'debug_logs_gist_created',
-              filename: attachment.originalname,
-              gist_url: debugLogsUrl,
-            })
-          );
-        } catch (err) {
-          console.error(
-            JSON.stringify({
-              t: new Date().toISOString(),
-              level: 'error',
-              msg: 'failed_to_create_gist',
-              filename: attachment?.originalname,
-              error: err.message,
-            })
-          );
-        }
+      } catch (err) {
+        console.error(
+          JSON.stringify({
+            t: new Date().toISOString(),
+            level: 'error',
+            msg: 'failed_to_create_gist',
+            filename: debugLogFile?.originalname,
+            error: err.message,
+          })
+        );
       }
     }
 
@@ -414,8 +425,8 @@ const reportHandler = async (req, res) => {
         msg: 'report_received',
         label_hint: issueType || null,
         user_token_present: Boolean(userToken),
-        debug_logs_present: Boolean(debugLogsUrl),
         blueprint_present: Boolean(blueprintUrl),
+        debug_logs_present: Boolean(debugLogsUrl),
       })
     );
 
