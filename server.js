@@ -496,8 +496,6 @@ const reportHandler = async (req, res) => {
     
     // Handle blueprint file
     if (blueprintFile) {
-      blueprintUrl = `/download/blueprints/${blueprintFile.filename}`;
-      
       console.log(
         JSON.stringify({
           t: new Date().toISOString(),
@@ -506,7 +504,6 @@ const reportHandler = async (req, res) => {
           filename: blueprintFile.originalname,
           size: blueprintFile.size,
           disk_path: blueprintFile.path,
-          download_url: blueprintUrl,
         })
       );
     }
@@ -549,7 +546,7 @@ const reportHandler = async (req, res) => {
     }
 
     // Build the GitHub issue body — NO sensitive metadata
-    // Order: Reporter, Description, System Info, Screenshot, Debug Logs
+    // Order: Reporter, Description, System Info, Screenshot, Blueprint, Debug Logs
     const mdSections = [];
 
     if (reporterName) {
@@ -566,10 +563,6 @@ const reportHandler = async (req, res) => {
       mdSections.push(`## Screenshot\n\n![Screenshot](${screenshotUrl})`);
     }
 
-    if (blueprintUrl) {
-      mdSections.push(`[Download Vessel Blueprint](${blueprintUrl})`);
-    }
-
     if (debugLogsUrl) {
       mdSections.push(`[View debug logs on Gist](${debugLogsUrl})`);
     }
@@ -583,7 +576,7 @@ const reportHandler = async (req, res) => {
         msg: 'report_received',
         label_hint: issueType || null,
         user_token_present: Boolean(userToken),
-        blueprint_present: Boolean(blueprintUrl),
+        blueprint_present: Boolean(blueprintFile),
         debug_logs_present: Boolean(debugLogsUrl),
       })
     );
@@ -605,11 +598,11 @@ const reportHandler = async (req, res) => {
           issueNumber: issue.number,
         });
         
-        // Add blueprint link as a comment to the issue
+        // Update the issue with the blueprint link as a comment
         await axios.post(
           `https://api.github.com/repos/${GITHUB_REPO}/issues/${issue.number}/comments`,
           {
-            body: `[Download Vessel Blueprint](${blueprintUrl})`,
+            body: `**Vessel Blueprint:** [Download](${blueprintUrl})`,
           },
           {
             headers: {
