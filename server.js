@@ -115,7 +115,22 @@ if (!fs.existsSync(uploadDir)) fs.mkdirSync(uploadDir, { recursive: true });
 // Multer setup for uploads (images, .vessel, logs, zip, etc.)
 // ───────────────────────────────────────────────────────────────────────────────
 const storage = multer.diskStorage({
-  destination: (_req, _file, cb) => cb(null, uploadDir),
+  destination: (_req, file, cb) => {
+    let subdir = 'misc';
+    const ext = path.extname(file.originalname).toLowerCase();
+    
+    if (['.png', '.jpg', '.jpeg', '.gif', '.webp'].includes(ext)) {
+      subdir = 'images';
+    } else if (['.txt', '.log'].includes(ext)) {
+      subdir = 'logs';
+    } else if (ext === '.blueprint') {
+      subdir = 'blueprints';
+    }
+    
+    const targetDir = path.join(uploadDir, subdir);
+    if (!fs.existsSync(targetDir)) fs.mkdirSync(targetDir, { recursive: true });
+    cb(null, targetDir);
+  },
   filename: (_req, file, cb) => {
     const base = path.basename(file.originalname).replace(/[^a-zA-Z0-9._-]/g, '_');
     cb(null, `${Date.now()}-${base}`);
@@ -124,13 +139,13 @@ const storage = multer.diskStorage({
 
 const ALLOWED_EXTS = new Set([
   '.png', '.jpg', '.jpeg', '.gif', '.webp',
-  '.txt', '.log'
+  '.txt', '.log', '.blueprint'
 ]);
 
 const fileFilter = (_req, file, cb) => {
   const ext = path.extname(file.originalname).toLowerCase();
   if (ALLOWED_EXTS.has(ext)) return cb(null, true);
-  const error = new Error(`Only image files (PNG, JPG, GIF, WebP) and debug logs (.txt, .log) allowed. Got: ${ext}`);
+  const error = new Error(`Only image files (PNG, JPG, GIF, WebP), debug logs (.txt, .log), and blueprints (.blueprint) allowed. Got: ${ext}`);
   error.code = 'UNSUPPORTED_FILE_TYPE';
   cb(error);
 };
@@ -306,40 +321,61 @@ const reportHandler = async (req, res) => {
     if (attachment) labels.push('has-debug-logs');
 
     let debugLogsUrl = null;
+    let blueprintUrl = null;
     
     if (attachment) {
-      try {
-        // Read the debug logs file
-        const debugContent = fs.readFileSync(attachment.path, 'utf-8');
-        
-        // Create a Gist for the debug logs
-        const gist = await createGithubGist({
-          filename: attachment.originalname,
-          content: debugContent,
-          description: `Debug logs from bug report: ${title}`,
-        });
-        
-        debugLogsUrl = gist.html_url;
+      const isBlueprint = attachment.originalname.toLowerCase().endsWith('.blueprint');
+      
+      if (isBlueprint) {
+        // Handle blueprint file
+        blueprintUrl = `/uploads/blueprints/${attachment.filename}`;
+        labels.push('has-blueprint');
         
         console.log(
           JSON.stringify({
             t: new Date().toISOString(),
             level: 'info',
-            msg: 'debug_logs_gist_created',
+            msg: 'blueprint_file_saved',
             filename: attachment.originalname,
-            gist_url: debugLogsUrl,
+            size: attachment.size,
+            path: blueprintUrl,
           })
         );
-      } catch (err) {
-        console.error(
-          JSON.stringify({
-            t: new Date().toISOString(),
-            level: 'error',
-            msg: 'failed_to_create_gist',
-            filename: attachment?.originalname,
-            error: err.message,
-          })
-        );
+      } else {
+        // Handle debug logs file
+        try {
+          // Read the debug logs file
+          const debugContent = fs.readFileSync(attachment.path, 'utf-8');
+          
+          // Create a Gist for the debug logs
+          const gist = await createGithubGist({
+            filename: attachment.originalname,
+            content: debugContent,
+            description: `Debug logs from bug report: ${title}`,
+          });
+          
+          debugLogsUrl = gist.html_url;
+          
+          console.log(
+            JSON.stringify({
+              t: new Date().toISOString(),
+              level: 'info',
+              msg: 'debug_logs_gist_created',
+              filename: attachment.originalname,
+              gist_url: debugLogsUrl,
+            })
+          );
+        } catch (err) {
+          console.error(
+            JSON.stringify({
+              t: new Date().toISOString(),
+              level: 'error',
+              msg: 'failed_to_create_gist',
+              filename: attachment?.originalname,
+              error: err.message,
+            })
+          );
+        }
       }
     }
 
@@ -361,6 +397,10 @@ const reportHandler = async (req, res) => {
       mdSections.push(`## Screenshot\n\n![Screenshot](${screenshotUrl})`);
     }
 
+    if (blueprintUrl) {
+      mdSections.push(`[Download Vessel Blueprint](${blueprintUrl})`);
+    }
+
     if (debugLogsUrl) {
       mdSections.push(`[View debug logs on Gist](${debugLogsUrl})`);
     }
@@ -375,6 +415,7 @@ const reportHandler = async (req, res) => {
         label_hint: issueType || null,
         user_token_present: Boolean(userToken),
         debug_logs_present: Boolean(debugLogsUrl),
+        blueprint_present: Boolean(blueprintUrl),
       })
     );
 
