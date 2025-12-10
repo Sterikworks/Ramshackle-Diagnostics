@@ -6,7 +6,6 @@ const cors = require('cors');
 const multer = require('multer');
 const path = require('path');
 const fs = require('fs');
-const { execSync } = require('child_process');
 
 // ───────────────────────────────────────────────────────────────────────────────
 // Express setup
@@ -252,7 +251,7 @@ app.get('/uploads-list', (_req, res) => {
 });
 
 // ───────────────────────────────────────────────────────────────────────────────
-// Helper: push blueprint to GitHub repo
+// Helper: push blueprint to GitHub repo via API
 // ───────────────────────────────────────────────────────────────────────────────
 async function pushBlueprintToGithub({ blueprintPath, blueprintName, issueNumber }) {
   try {
@@ -260,62 +259,53 @@ async function pushBlueprintToGithub({ blueprintPath, blueprintName, issueNumber
       throw new Error('GitHub configuration missing');
     }
 
-    const repoName = GITHUB_REPO.split('/')[1]; // e.g., "Ramshackle_Issues"
-    const tempDir = path.join('/tmp', `blueprint-${Date.now()}`);
-    const blueprintsDir = path.join(tempDir, 'blueprints');
+    // Read blueprint file as base64
+    const fileContent = fs.readFileSync(blueprintPath);
+    const base64Content = fileContent.toString('base64');
     
-    // Create temp directory
-    fs.mkdirSync(tempDir, { recursive: true });
-    fs.mkdirSync(blueprintsDir, { recursive: true });
+    const fileName = `issue-${issueNumber}-${blueprintName}`;
+    const filePath = `blueprints/${fileName}`;
     
-    // Clone the repo with auth
-    const repoUrl = `https://${GITHUB_TOKEN}@github.com/${GITHUB_REPO}.git`;
     console.log(
       JSON.stringify({
         t: new Date().toISOString(),
         level: 'info',
-        msg: 'cloning_repo',
-        repo: GITHUB_REPO,
+        msg: 'uploading_blueprint_to_github',
+        file: filePath,
+        size: fileContent.length,
       })
     );
     
-    execSync(`git clone ${repoUrl} ${tempDir}`, { stdio: 'pipe' });
+    // Use GitHub API to create/update file
+    const url = `https://api.github.com/repos/${GITHUB_REPO}/contents/${filePath}`;
     
-    // Copy blueprint file
-    const destPath = path.join(blueprintsDir, `issue-${issueNumber}-${blueprintName}`);
-    fs.copyFileSync(blueprintPath, destPath);
-    
-    console.log(
-      JSON.stringify({
-        t: new Date().toISOString(),
-        level: 'info',
-        msg: 'blueprint_copied_to_repo',
-        destination: destPath,
-      })
+    const resp = await axios.put(
+      url,
+      {
+        message: `Add blueprint from issue #${issueNumber}`,
+        content: base64Content,
+        branch: 'main',
+      },
+      {
+        headers: {
+          Authorization: `token ${GITHUB_TOKEN}`,
+          'User-Agent': 'UnityBugReporter',
+          Accept: 'application/vnd.github+json',
+        },
+      }
     );
     
-    // Configure git
-    execSync('git config user.email "bugreporter@ramshacklegame.com"', { cwd: tempDir, stdio: 'pipe' });
-    execSync('git config user.name "Ramshackle Bug Reporter"', { cwd: tempDir, stdio: 'pipe' });
-    
-    // Commit and push
-    execSync(`git add blueprints/issue-${issueNumber}-${blueprintName}`, { cwd: tempDir, stdio: 'pipe' });
-    execSync(`git commit -m "Add blueprint from issue #${issueNumber}"`, { cwd: tempDir, stdio: 'pipe' });
-    execSync('git push origin main', { cwd: tempDir, stdio: 'pipe' });
-    
-    const githubBlueprintUrl = `https://github.com/${GITHUB_REPO}/blob/main/blueprints/issue-${issueNumber}-${blueprintName}`;
+    const githubBlueprintUrl = `https://github.com/${GITHUB_REPO}/blob/main/${filePath}`;
     
     console.log(
       JSON.stringify({
         t: new Date().toISOString(),
         level: 'info',
-        msg: 'blueprint_pushed_to_github',
+        msg: 'blueprint_uploaded_to_github',
         url: githubBlueprintUrl,
+        commit: resp.data?.commit?.sha,
       })
     );
-    
-    // Cleanup
-    execSync(`rm -rf ${tempDir}`, { stdio: 'pipe' });
     
     return githubBlueprintUrl;
   } catch (err) {
@@ -323,8 +313,9 @@ async function pushBlueprintToGithub({ blueprintPath, blueprintName, issueNumber
       JSON.stringify({
         t: new Date().toISOString(),
         level: 'error',
-        msg: 'failed_to_push_blueprint',
+        msg: 'failed_to_upload_blueprint',
         error: err.message,
+        status: err?.response?.status,
       })
     );
     throw err;
