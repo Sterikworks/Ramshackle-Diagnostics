@@ -348,7 +348,8 @@ const reportHandler = async (req, res) => {
           msg: 'blueprint_file_saved',
           filename: blueprintFile.originalname,
           size: blueprintFile.size,
-          path: blueprintUrl,
+          disk_path: blueprintFile.path,
+          download_url: blueprintUrl,
         })
       );
     }
