@@ -594,7 +594,7 @@ const reportHandler = async (req, res) => {
       try {
         blueprintUrl = await pushBlueprintToGithub({
           blueprintPath: blueprintFile.path,
-          blueprintName: blueprintFile.filename,
+          blueprintName: blueprintFile.originalname,
           issueNumber: issue.number,
         });
         
