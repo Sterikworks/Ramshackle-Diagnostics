@@ -6,6 +6,7 @@ const cors = require('cors');
 const multer = require('multer');
 const path = require('path');
 const fs = require('fs');
+const { execSync } = require('child_process');
 
 // ───────────────────────────────────────────────────────────────────────────────
 // Express setup
@@ -251,7 +252,85 @@ app.get('/uploads-list', (_req, res) => {
 });
 
 // ───────────────────────────────────────────────────────────────────────────────
-// Helper: create GitHub Gist (for large debug logs)
+// Helper: push blueprint to GitHub repo
+// ───────────────────────────────────────────────────────────────────────────────
+async function pushBlueprintToGithub({ blueprintPath, blueprintName, issueNumber }) {
+  try {
+    if (!GITHUB_TOKEN || !GITHUB_REPO) {
+      throw new Error('GitHub configuration missing');
+    }
+
+    const repoName = GITHUB_REPO.split('/')[1]; // e.g., "Ramshackle_Issues"
+    const tempDir = path.join('/tmp', `blueprint-${Date.now()}`);
+    const blueprintsDir = path.join(tempDir, 'blueprints');
+    
+    // Create temp directory
+    fs.mkdirSync(tempDir, { recursive: true });
+    fs.mkdirSync(blueprintsDir, { recursive: true });
+    
+    // Clone the repo with auth
+    const repoUrl = `https://${GITHUB_TOKEN}@github.com/${GITHUB_REPO}.git`;
+    console.log(
+      JSON.stringify({
+        t: new Date().toISOString(),
+        level: 'info',
+        msg: 'cloning_repo',
+        repo: GITHUB_REPO,
+      })
+    );
+    
+    execSync(`git clone ${repoUrl} ${tempDir}`, { stdio: 'pipe' });
+    
+    // Copy blueprint file
+    const destPath = path.join(blueprintsDir, `issue-${issueNumber}-${blueprintName}`);
+    fs.copyFileSync(blueprintPath, destPath);
+    
+    console.log(
+      JSON.stringify({
+        t: new Date().toISOString(),
+        level: 'info',
+        msg: 'blueprint_copied_to_repo',
+        destination: destPath,
+      })
+    );
+    
+    // Configure git
+    execSync('git config user.email "bugreporter@ramshacklegame.com"', { cwd: tempDir, stdio: 'pipe' });
+    execSync('git config user.name "Ramshackle Bug Reporter"', { cwd: tempDir, stdio: 'pipe' });
+    
+    // Commit and push
+    execSync(`git add blueprints/issue-${issueNumber}-${blueprintName}`, { cwd: tempDir, stdio: 'pipe' });
+    execSync(`git commit -m "Add blueprint from issue #${issueNumber}"`, { cwd: tempDir, stdio: 'pipe' });
+    execSync('git push origin main', { cwd: tempDir, stdio: 'pipe' });
+    
+    const githubBlueprintUrl = `https://github.com/${GITHUB_REPO}/blob/main/blueprints/issue-${issueNumber}-${blueprintName}`;
+    
+    console.log(
+      JSON.stringify({
+        t: new Date().toISOString(),
+        level: 'info',
+        msg: 'blueprint_pushed_to_github',
+        url: githubBlueprintUrl,
+      })
+    );
+    
+    // Cleanup
+    execSync(`rm -rf ${tempDir}`, { stdio: 'pipe' });
+    
+    return githubBlueprintUrl;
+  } catch (err) {
+    console.error(
+      JSON.stringify({
+        t: new Date().toISOString(),
+        level: 'error',
+        msg: 'failed_to_push_blueprint',
+        error: err.message,
+      })
+    );
+    throw err;
+  }
+}
+
 // ───────────────────────────────────────────────────────────────────────────────
 async function createGithubGist({ filename, content, description }) {
   if (!GITHUB_TOKEN) {
@@ -526,12 +605,58 @@ const reportHandler = async (req, res) => {
       labels,
     });
 
+    // Now that we have the issue number, push blueprint to repo if it exists
+    if (blueprintFile) {
+      try {
+        blueprintUrl = await pushBlueprintToGithub({
+          blueprintPath: blueprintFile.path,
+          blueprintName: blueprintFile.filename,
+          issueNumber: issue.number,
+        });
+        
+        // Add blueprint link as a comment to the issue
+        await axios.post(
+          `https://api.github.com/repos/${GITHUB_REPO}/issues/${issue.number}/comments`,
+          {
+            body: `[Download Vessel Blueprint](${blueprintUrl})`,
+          },
+          {
+            headers: {
+              Authorization: `token ${GITHUB_TOKEN}`,
+              'User-Agent': 'UnityBugReporter',
+              Accept: 'application/vnd.github+json',
+            },
+          }
+        );
+        
+        console.log(
+          JSON.stringify({
+            t: new Date().toISOString(),
+            level: 'info',
+            msg: 'blueprint_comment_added',
+            issue_number: issue.number,
+            blueprint_url: blueprintUrl,
+          })
+        );
+      } catch (err) {
+        console.error(
+          JSON.stringify({
+            t: new Date().toISOString(),
+            level: 'error',
+            msg: 'failed_to_push_blueprint_to_github',
+            error: err.message,
+          })
+        );
+      }
+    }
+
     res.json({
       success: true,
       issue_url: issue.html_url,
       issue_number: issue.number,
       // Debug logs are stored as a Gist on GitHub
       debug_logs_url: debugLogsUrl || null,
+      blueprint_url: blueprintUrl || null,
     });
   } catch (err) {
     const status = err?.response?.status || 500;
