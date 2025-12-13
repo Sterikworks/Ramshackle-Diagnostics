@@ -8,9 +8,20 @@ const path = require('path');
 const fs = require('fs');
 
 // ───────────────────────────────────────────────────────────────────────────────
+// Configuration
+// ───────────────────────────────────────────────────────────────────────────────
+const MB = 1024 * 1024;
+const FILE_SIZE_LIMITS = {
+  screenshots: 100 * MB, // PNG, JPG, GIF, WebP
+  logs: 100 * MB,        // .txt, .log (gist limit)
+  blueprints: 100 * MB,  // .blueprint files
+};
+
+// ───────────────────────────────────────────────────────────────────────────────
 // Express setup
 // ───────────────────────────────────────────────────────────────────────────────
 const app = express();
+
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ limit: '50mb', extended: true }));
 app.use(cors());
@@ -210,10 +221,32 @@ const fileFilter = (_req, file, cb) => {
   cb(error);
 };
 
+// Custom file size filter that checks per-type limits
+const fileSizeFilter = (_req, file, cb) => {
+  const ext = path.extname(file.originalname).toLowerCase();
+  let limit = FILE_SIZE_LIMITS.screenshots; // default
+  
+  if (['.txt', '.log'].includes(ext)) {
+    limit = FILE_SIZE_LIMITS.logs;
+  } else if (ext === '.blueprint') {
+    limit = FILE_SIZE_LIMITS.blueprints;
+  }
+  
+  if (file.size > limit) {
+    const limitMB = (limit / (1024 * 1024)).toFixed(0);
+    const fileMB = (file.size / (1024 * 1024)).toFixed(2);
+    const error = new Error(`File size ${fileMB}MB exceeds limit of ${limitMB}MB`);
+    error.code = 'LIMIT_FILE_SIZE';
+    return cb(error);
+  }
+  
+  cb(null);
+};
+
 const upload = multer({
   storage,
-  fileFilter,
-  limits: { fileSize: 100 * 1024 * 1024 }, // 100MB
+  fileFilter: fileFilter,
+  limits: { fileSize: 100 * MB }, // Max 100MB (enforced per-type above)
 });
 
 // ───────────────────────────────────────────────────────────────────────────────
@@ -689,6 +722,31 @@ app.use((err, req, res, next) => {
 
   if (err.code === 'UNSUPPORTED_FILE_TYPE') {
     return res.status(400).json({ error: err.message });
+  }
+
+  if (err.code === 'LIMIT_FILE_SIZE') {
+    // Provide helpful message with file type info
+    let fileTypeInfo = '';
+    if (req.files && req.files.length > 0) {
+      const oversizedFiles = req.files
+        .map(f => {
+          const ext = path.extname(f.originalname).toLowerCase();
+          let type = 'file';
+          if (['.png', '.jpg', '.jpeg', '.gif', '.webp'].includes(ext)) {
+            type = 'screenshot';
+          } else if (['.txt', '.log'].includes(ext)) {
+            type = 'log';
+          } else if (ext === '.blueprint') {
+            type = 'blueprint';
+          }
+          return `${type} (${f.originalname}, ${(f.size / (1024 * 1024)).toFixed(2)} MB)`;
+        })
+        .join(', ');
+      fileTypeInfo = ` - ${oversizedFiles}`;
+    }
+    return res.status(413).json({ 
+      error: `File size exceeds 100 MB limit${fileTypeInfo}. Maximum size per file is 100 MB.` 
+    });
   }
 
   res.status(500).json({ error: 'Internal server error' });
