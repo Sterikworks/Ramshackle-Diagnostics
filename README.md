@@ -1,44 +1,72 @@
 # Ramshackle Bug Reporter
 
-Docker-based bug reporting service that accepts bug reports from the Unity game and creates GitHub issues automatically.
+Docker-based bug reporting service that accepts bug reports from the Unity game and creates GitHub or GitLab issues automatically.
 
 ## Features
 
 - Accepts bug reports via REST API
-- Uploads .vessel files (max 5MB)
-- Creates GitHub issues with labels, screenshots, and system info
+- **Multi-Platform Support**: Works with GitHub or GitLab (including self-hosted GitLab)
+- Uploads .vessel files (max 100MB)
+- Creates issues with labels, screenshots, and system info
+- Stores debug logs in Gists (GitHub) or Snippets (GitLab)
 - Containerized with Docker for easy deployment
 
 ## Prerequisites
 
 - Docker and Docker Compose installed
-- GitHub Personal Access Token with `repo` scope
+- **GitHub**: Personal Access Token with `repo` scope
+- **GitLab**: Personal Access Token with `api` scope
 
 ## Quick Start
 
-1. **Clone the repository**
-   ```bash
-   git clone <your-repo-url>
-   cd Ramshackle-Diagnostics
-   ```
+### 1. Clone the repository
+```bash
+git clone <your-repo-url>
+cd Ramshackle-Diagnostics
+```
 
-2. **Configure your GitHub token**
+### 2. Configure Your Platform
 
-   Edit `docker-compose.yml` and replace the placeholder with your actual GitHub Personal Access Token (needs `repo` scope):
-   ```yaml
-   - GITHUB_TOKEN=your_github_token_here              # <- Replace this value
-   ```
+Edit `docker-compose.yml` and choose your platform:
 
-3. **Build and run**
-   ```bash
-   docker-compose up -d
-   ```
+#### For GitLab (Default)
+```yaml
+environment:
+  - PLATFORM=gitlab
+  - GITLAB_TOKEN=your_gitlab_token_here
+  - GITLAB_URL=https://git.ramshacklegame.com
+  - GITLAB_PROJECT_ID=mountainous-development/Ramshackle_Issues
+```
 
-4. **Check status**
-   ```bash
-   docker-compose ps
-   docker-compose logs -f
-   ```
+**To create a GitLab Personal Access Token:**
+1. Go to your GitLab instance (e.g., `https://git.ramshacklegame.com`)
+2. Navigate to **Settings → Access Tokens**
+3. Create a token with `api` scope
+4. Copy the token and paste it as `GITLAB_TOKEN`
+
+#### For GitHub
+```yaml
+environment:
+  - PLATFORM=github
+  - GITHUB_TOKEN=your_github_token_here
+  - GITHUB_REPO=Sterikworks/Ramshackle_Issues
+```
+
+**To create a GitHub Personal Access Token:**
+1. Go to https://github.com/settings/tokens
+2. Create a token with `repo` scope
+3. Copy the token and paste it as `GITHUB_TOKEN`
+
+### 3. Build and run
+```bash
+docker-compose up -d
+```
+
+### 4. Check status
+```bash
+docker-compose ps
+docker-compose logs -f
+```
 
 ## Deployment
 
@@ -53,7 +81,7 @@ Docker-based bug reporting service that accepts bug reports from the Unity game 
    ```bash
    git clone <your-repo-url>
    cd Ramshackle-Diagnostics
-   nano docker-compose.yml  # Edit GITHUB_TOKEN value
+   nano docker-compose.yml  # Edit platform settings
    ```
 
 3. Start the service:
@@ -97,21 +125,45 @@ Content-Type: application/json
   "description": "Bug description",
   "issueType": "bug",
   "screenshotUrl": "https://...",
-  "systemInfo": "OS: Windows\nGame Version: 1.0.0",
+  "systemInfo": "OS: Windows\\nGame Version: 1.0.0",
   "userToken": "user-identifier",
   "vesselFileUrl": "https://..."
 }
 ```
 
+## Configuration
+
+### Environment Variables
+
+| Variable | Required | Description |
+|----------|----------|-------------|
+| `PLATFORM` | No | Platform to use: `github` or `gitlab` (default: `github`) |
+| `GITHUB_TOKEN` | For GitHub | GitHub Personal Access Token (needs `repo` scope) |
+| `GITHUB_REPO` | For GitHub | GitHub repository in format `owner/repo` |
+| `GITLAB_TOKEN` | For GitLab | GitLab Personal Access Token (needs `api` scope) |
+| `GITLAB_URL` | For GitLab | GitLab instance URL (e.g., `https://git.ramshacklegame.com`) |
+| `GITLAB_PROJECT_ID` | For GitLab | Project path in format `namespace/project` |
+
+### Platform Differences
+
+| Feature | GitHub | GitLab |
+|---------|--------|--------|
+| Issue Creation | ✅ | ✅ |
+| Blueprint Upload | ✅ Committed to repo | ✅ Committed to repo |
+| Debug Logs | 📝 Gist (private) | 📝 Snippet (private) |
+| Labels | ✅ | ✅ |
+| Screenshots | ✅ Via URL | ✅ Via URL |
+
 ## File Structure
 
 ```
 .
-├── Dockerfile              # Container definition
-├── docker-compose.yml      # Docker Compose config (edit GITHUB_TOKEN here)
-├── package.json           # Node.js dependencies
-├── server.js              # Main application
-└── uploads/               # Uploaded files (persisted)
+├── Dockerfile                    # Container definition
+├── docker-compose.yml            # Docker Compose config (configure platform here)
+├── package.json                  # Node.js dependencies
+├── server.js                     # Main application (supports GitHub & GitLab)
+├── server_github_only_backup.js  # Original GitHub-only version
+└── uploads/                      # Uploaded files (persisted)
 ```
 
 ## Ports
@@ -120,7 +172,7 @@ Content-Type: application/json
 
 ## Volumes
 
-- `./uploads` - Persisted uploaded .vessel files
+- `./uploads` - Persisted uploaded .vessel files, debug logs, and screenshots
 
 ## Troubleshooting
 
@@ -137,7 +189,21 @@ ports:
 ```
 
 **GitHub API errors:**
-Verify your `GITHUB_TOKEN` in `docker-compose.yml` has `repo` scope and is valid.
+- Verify your `GITHUB_TOKEN` in `docker-compose.yml` has `repo` scope
+- Check that `GITHUB_REPO` is in the correct format (`owner/repo`)
+
+**GitLab API errors:**
+- Verify your `GITLAB_TOKEN` has `api` scope
+- Check that `GITLAB_URL` doesn't have a trailing slash
+- Verify `GITLAB_PROJECT_ID` is the correct project path (visible in your GitLab project)
+- For self-hosted GitLab, ensure the URL is accessible from the Docker container
+
+**Platform not switching:**
+Make sure you restart the container after changing `PLATFORM`:
+```bash
+docker-compose down
+docker-compose up -d
+```
 
 ## License
 

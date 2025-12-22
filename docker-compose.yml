@@ -8,8 +8,17 @@ services:
     environment:
       - NODE_ENV=production
       - PORT=5000
-      - GITHUB_TOKEN=your_github_token_here              # REQUIRED: Your GitHub Personal Access Token (repo scope)
-      - GITHUB_REPO=Sterikworks/Ramshackle_Issues        # GitHub repo for issues
+      # Platform selection: "github" or "gitlab" (default: github)
+      - PLATFORM=gitlab
+      
+      # GitHub settings (use when PLATFORM=github)
+      - GITHUB_TOKEN=your_github_token_here              # GitHub Personal Access Token (repo scope)
+      - GITHUB_REPO=Sterikworks/Ramshackle_Issues        # GitHub repo (owner/repo)
+      
+      # GitLab settings (use when PLATFORM=gitlab)
+      - GITLAB_TOKEN=your_gitlab_token_here              # GitLab Personal Access Token (api scope)
+      - GITLAB_URL=https://git.ramshacklegame.com        # GitLab instance URL (without trailing slash)
+      - GITLAB_PROJECT_ID=mountainous-development/Ramshackle_Issues  # Project path (namespace/project)
     volumes:
       # Persist uploaded files
       - ./uploads:/app/uploads

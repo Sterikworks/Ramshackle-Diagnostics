@@ -159,64 +159,22 @@ process.on('uncaughtException', (err) => {
 });
 
 // ───────────────────────────────────────────────────────────────────────────────
-// Platform config (GitHub or GitLab)
+// GitHub config (set these in your docker-compose.yml environment)
 // ───────────────────────────────────────────────────────────────────────────────
-const PLATFORM = (process.env.PLATFORM || 'github').toLowerCase();
+const GITHUB_TOKEN = process.env.GITHUB_TOKEN; // e.g., ghp_***
+const GITHUB_REPO = process.env.GITHUB_REPO;   // e.g., "Sterikworks/Ramshackle_Issues"
 
-// GitHub config
-const GITHUB_TOKEN = process.env.GITHUB_TOKEN;
-const GITHUB_REPO = process.env.GITHUB_REPO;
-
-// GitLab config
-const GITLAB_TOKEN = process.env.GITLAB_TOKEN;
-const GITLAB_URL = process.env.GITLAB_URL;
-const GITLAB_PROJECT_ID = process.env.GITLAB_PROJECT_ID;
-
-if (PLATFORM === 'github') {
-  if (!GITHUB_TOKEN || !GITHUB_REPO) {
-    console.warn(
-      JSON.stringify({
-        t: new Date().toISOString(),
-        level: 'warn',
-        msg: 'missing_github_config',
-        has_token: Boolean(GITHUB_TOKEN),
-        has_repo: Boolean(GITHUB_REPO),
-      })
-    );
-  }
-} else if (PLATFORM === 'gitlab') {
-  if (!GITLAB_TOKEN || !GITLAB_URL || !GITLAB_PROJECT_ID) {
-    console.warn(
-      JSON.stringify({
-        t: new Date().toISOString(),
-        level: 'warn',
-        msg: 'missing_gitlab_config',
-        has_token: Boolean(GITLAB_TOKEN),
-        has_url: Boolean(GITLAB_URL),
-        has_project: Boolean(GITLAB_PROJECT_ID),
-      })
-    );
-  }
-} else {
-  console.error(
+if (!GITHUB_TOKEN || !GITHUB_REPO) {
+  console.warn(
     JSON.stringify({
       t: new Date().toISOString(),
-      level: 'error',
-      msg: 'invalid_platform',
-      platform: PLATFORM,
-      valid_platforms: ['github', 'gitlab'],
+      level: 'warn',
+      msg: 'missing_github_config',
+      has_token: Boolean(GITHUB_TOKEN),
+      has_repo: Boolean(GITHUB_REPO),
     })
   );
 }
-
-console.log(
-  JSON.stringify({
-    t: new Date().toISOString(),
-    level: 'info',
-    msg: 'platform_configured',
-    platform: PLATFORM,
-  })
-);
 
 // ───────────────────────────────────────────────────────────────────────────────
 // Ensure uploads folder exists
@@ -399,82 +357,6 @@ async function pushBlueprintToGithub({ blueprintPath, blueprintName, issueNumber
 }
 
 // ───────────────────────────────────────────────────────────────────────────────
-// Helper: upload blueprint to GitLab repo via API
-// ───────────────────────────────────────────────────────────────────────────────
-async function uploadBlueprintToGitlab({ blueprintPath, blueprintName, issueNumber }) {
-  try {
-    if (!GITLAB_TOKEN || !GITLAB_URL || !GITLAB_PROJECT_ID) {
-      throw new Error('GitLab configuration missing');
-    }
-
-    // Read blueprint file as base64
-    const fileContent = fs.readFileSync(blueprintPath);
-    const base64Content = fileContent.toString('base64');
-    
-    const fileName = `issue-${issueNumber}-${blueprintName}`;
-    const filePath = `blueprints/${fileName}`;
-    
-    console.log(
-      JSON.stringify({
-        t: new Date().toISOString(),
-        level: 'info',
-        msg: 'uploading_blueprint_to_gitlab',
-        file: filePath,
-        size: fileContent.length,
-      })
-    );
-    
-    // URL encode the project ID
-    const encodedProjectId = encodeURIComponent(GITLAB_PROJECT_ID);
-    const url = `${GITLAB_URL}/api/v4/projects/${encodedProjectId}/repository/files/${encodeURIComponent(filePath)}`;
-    
-    const resp = await axios.post(
-      url,
-      {
-        branch: 'main',
-        content: base64Content,
-        commit_message: `Add blueprint from issue #${issueNumber}`,
-        encoding: 'base64',
-      },
-      {
-        headers: {
-          'PRIVATE-TOKEN': GITLAB_TOKEN,
-          'Content-Type': 'application/json',
-        },
-      }
-    );
-    
-    const gitlabBlueprintUrl = `${GITLAB_URL}/${GITLAB_PROJECT_ID}/-/blob/main/${filePath}`;
-    
-    console.log(
-      JSON.stringify({
-        t: new Date().toISOString(),
-        level: 'info',
-        msg: 'blueprint_uploaded_to_gitlab',
-        url: gitlabBlueprintUrl,
-        file_path: resp.data?.file_path,
-      })
-    );
-    
-    return gitlabBlueprintUrl;
-  } catch (err) {
-    console.error(
-      JSON.stringify({
-        t: new Date().toISOString(),
-        level: 'error',
-        msg: 'failed_to_upload_blueprint_to_gitlab',
-        error: err.message,
-        status: err?.response?.status,
-        response_data: err?.response?.data,
-      })
-    );
-    throw err;
-  }
-}
-
-// ───────────────────────────────────────────────────────────────────────────────
-// Helper: create GitHub Gist for debug logs
-// ───────────────────────────────────────────────────────────────────────────────
 async function createGithubGist({ filename, content, description }) {
   if (!GITHUB_TOKEN) {
     throw new Error('GitHub token missing (GITHUB_TOKEN)');
@@ -515,55 +397,6 @@ async function createGithubGist({ filename, content, description }) {
       msg: 'create_gist_success',
       gist_id: resp.data?.id,
       gist_url: resp.data?.html_url,
-    })
-  );
-
-  return resp.data;
-}
-
-// ───────────────────────────────────────────────────────────────────────────────
-// Helper: create GitLab Snippet for debug logs
-// ───────────────────────────────────────────────────────────────────────────────
-async function createGitlabSnippet({ filename, content, description }) {
-  if (!GITLAB_TOKEN || !GITLAB_URL || !GITLAB_PROJECT_ID) {
-    throw new Error('GitLab configuration missing');
-  }
-
-  const encodedProjectId = encodeURIComponent(GITLAB_PROJECT_ID);
-  const url = `${GITLAB_URL}/api/v4/projects/${encodedProjectId}/snippets`;
-  
-  console.log(
-    JSON.stringify({
-      t: new Date().toISOString(),
-      level: 'info',
-      msg: 'create_snippet_attempt',
-      filename,
-    })
-  );
-
-  const resp = await axios.post(
-    url,
-    {
-      title: description || 'Bug Report Debug Logs',
-      file_name: filename,
-      content: content,
-      visibility: 'private',
-    },
-    {
-      headers: {
-        'PRIVATE-TOKEN': GITLAB_TOKEN,
-        'Content-Type': 'application/json',
-      },
-    }
-  );
-
-  console.log(
-    JSON.stringify({
-      t: new Date().toISOString(),
-      level: 'info',
-      msg: 'create_snippet_success',
-      snippet_id: resp.data?.id,
-      snippet_url: resp.data?.web_url,
     })
   );
 
@@ -612,97 +445,6 @@ async function createGithubIssue({ title, body, labels }) {
   );
 
   return resp.data;
-}
-
-// ───────────────────────────────────────────────────────────────────────────────
-// Helper: create GitLab issue
-// ───────────────────────────────────────────────────────────────────────────────
-async function createGitlabIssue({ title, body, labels }) {
-  if (!GITLAB_TOKEN || !GITLAB_URL || !GITLAB_PROJECT_ID) {
-    throw new Error('GitLab configuration missing');
-  }
-
-  const encodedProjectId = encodeURIComponent(GITLAB_PROJECT_ID);
-  const url = `${GITLAB_URL}/api/v4/projects/${encodedProjectId}/issues`;
-  
-  console.log(
-    JSON.stringify({
-      t: new Date().toISOString(),
-      level: 'info',
-      msg: 'create_issue_attempt',
-      title,
-      labels,
-    })
-  );
-
-  const resp = await axios.post(
-    url,
-    {
-      title,
-      description: body,
-      labels: labels.join(','),
-    },
-    {
-      headers: {
-        'PRIVATE-TOKEN': GITLAB_TOKEN,
-        'Content-Type': 'application/json',
-      },
-    }
-  );
-
-  console.log(
-    JSON.stringify({
-      t: new Date().toISOString(),
-      level: 'info',
-      msg: 'create_issue_success',
-      issue_iid: resp.data?.iid,
-      issue_url: resp.data?.web_url,
-    })
-  );
-
-  return resp.data;
-}
-
-// ───────────────────────────────────────────────────────────────────────────────
-// Helper: update GitHub issue
-// ───────────────────────────────────────────────────────────────────────────────
-async function updateGithubIssue({ issueNumber, body }) {
-  if (!GITHUB_TOKEN || !GITHUB_REPO) {
-    throw new Error('GitHub configuration missing');
-  }
-
-  await axios.patch(
-    `https://api.github.com/repos/${GITHUB_REPO}/issues/${issueNumber}`,
-    { body },
-    {
-      headers: {
-        Authorization: `token ${GITHUB_TOKEN}`,
-        'User-Agent': 'UnityBugReporter',
-        Accept: 'application/vnd.github+json',
-      },
-    }
-  );
-}
-
-// ───────────────────────────────────────────────────────────────────────────────
-// Helper: update GitLab issue
-// ───────────────────────────────────────────────────────────────────────────────
-async function updateGitlabIssue({ issueIid, description }) {
-  if (!GITLAB_TOKEN || !GITLAB_URL || !GITLAB_PROJECT_ID) {
-    throw new Error('GitLab configuration missing');
-  }
-
-  const encodedProjectId = encodeURIComponent(GITLAB_PROJECT_ID);
-  await axios.put(
-    `${GITLAB_URL}/api/v4/projects/${encodedProjectId}/issues/${issueIid}`,
-    { description },
-    {
-      headers: {
-        'PRIVATE-TOKEN': GITLAB_TOKEN,
-        'Content-Type': 'application/json',
-      },
-    }
-  );
 }
 
 // ───────────────────────────────────────────────────────────────────────────────
@@ -806,51 +548,30 @@ const reportHandler = async (req, res) => {
         // Read the debug logs file
         const debugContent = fs.readFileSync(debugLogFile.path, 'utf-8');
         
-        if (PLATFORM === 'github') {
-          // Create a Gist for the debug logs
-          const gist = await createGithubGist({
+        // Create a Gist for the debug logs
+        const gist = await createGithubGist({
+          filename: debugLogFile.originalname,
+          content: debugContent,
+          description: `Debug logs from bug report: ${title}`,
+        });
+        
+        debugLogsUrl = gist.html_url;
+        
+        console.log(
+          JSON.stringify({
+            t: new Date().toISOString(),
+            level: 'info',
+            msg: 'debug_logs_gist_created',
             filename: debugLogFile.originalname,
-            content: debugContent,
-            description: `Debug logs from bug report: ${title}`,
-          });
-          
-          debugLogsUrl = gist.html_url;
-          
-          console.log(
-            JSON.stringify({
-              t: new Date().toISOString(),
-              level: 'info',
-              msg: 'debug_logs_gist_created',
-              filename: debugLogFile.originalname,
-              gist_url: debugLogsUrl,
-            })
-          );
-        } else if (PLATFORM === 'gitlab') {
-          // Create a Snippet for the debug logs
-          const snippet = await createGitlabSnippet({
-            filename: debugLogFile.originalname,
-            content: debugContent,
-            description: `Debug logs from bug report: ${title}`,
-          });
-          
-          debugLogsUrl = snippet.web_url;
-          
-          console.log(
-            JSON.stringify({
-              t: new Date().toISOString(),
-              level: 'info',
-              msg: 'debug_logs_snippet_created',
-              filename: debugLogFile.originalname,
-              snippet_url: debugLogsUrl,
-            })
-          );
-        }
+            gist_url: debugLogsUrl,
+          })
+        );
       } catch (err) {
         console.error(
           JSON.stringify({
             t: new Date().toISOString(),
             level: 'error',
-            msg: 'failed_to_create_debug_logs',
+            msg: 'failed_to_create_gist',
             filename: debugLogFile?.originalname,
             error: err.message,
           })
@@ -858,7 +579,7 @@ const reportHandler = async (req, res) => {
       }
     }
 
-    // Build the issue body — NO sensitive metadata
+    // Build the GitHub issue body — NO sensitive metadata
     // Order: Reporter, Description, System Info, Screenshot, Blueprint, Debug Logs
     const mdSections = [];
 
@@ -877,8 +598,7 @@ const reportHandler = async (req, res) => {
     }
 
     if (debugLogsUrl) {
-      const platform = PLATFORM === 'gitlab' ? 'Snippet' : 'Gist';
-      mdSections.push(`[View debug logs on ${platform}](${debugLogsUrl})`);
+      mdSections.push(`[View debug logs on Gist](${debugLogsUrl})`);
     }
 
     // We intentionally DO NOT add metadata (IP, UA, etc.) to the issue body.
@@ -897,65 +617,42 @@ const reportHandler = async (req, res) => {
 
     const issueBody = mdSections.join('\n\n');
 
-    let issue;
-    if (PLATFORM === 'github') {
-      issue = await createGithubIssue({
-        title,
-        body: issueBody,
-        labels,
-      });
-    } else if (PLATFORM === 'gitlab') {
-      issue = await createGitlabIssue({
-        title,
-        body: issueBody,
-        labels,
-      });
-    } else {
-      throw new Error(`Unsupported platform: ${PLATFORM}`);
-    }
-    
-    // Normalize issue response (GitHub uses 'number', GitLab uses 'iid')
-    const issueNumber = issue.number || issue.iid;
-    const issueUrl = issue.html_url || issue.web_url;
+    const issue = await createGithubIssue({
+      title,
+      body: issueBody,
+      labels,
+    });
 
     // Now that we have the issue number, push blueprint to repo if it exists
     if (blueprintFile) {
       try {
-        if (PLATFORM === 'github') {
-          blueprintUrl = await pushBlueprintToGithub({
-            blueprintPath: blueprintFile.path,
-            blueprintName: blueprintFile.originalname,
-            issueNumber,
-          });
-        } else if (PLATFORM === 'gitlab') {
-          blueprintUrl = await uploadBlueprintToGitlab({
-            blueprintPath: blueprintFile.path,
-            blueprintName: blueprintFile.originalname,
-            issueNumber,
-          });
-        }
+        blueprintUrl = await pushBlueprintToGithub({
+          blueprintPath: blueprintFile.path,
+          blueprintName: blueprintFile.originalname,
+          issueNumber: issue.number,
+        });
         
         // Update the issue body to include the blueprint link
         const updatedBody = issueBody + '\n\n**Vessel Blueprint:** [Download](' + blueprintUrl + ')';
         
-        if (PLATFORM === 'github') {
-          await updateGithubIssue({
-            issueNumber,
-            body: updatedBody,
-          });
-        } else if (PLATFORM === 'gitlab') {
-          await updateGitlabIssue({
-            issueIid: issueNumber,
-            description: updatedBody,
-          });
-        }
+        await axios.patch(
+          `https://api.github.com/repos/${GITHUB_REPO}/issues/${issue.number}`,
+          { body: updatedBody },
+          {
+            headers: {
+              Authorization: `token ${GITHUB_TOKEN}`,
+              'User-Agent': 'UnityBugReporter',
+              Accept: 'application/vnd.github+json',
+            },
+          }
+        );
         
         console.log(
           JSON.stringify({
             t: new Date().toISOString(),
             level: 'info',
             msg: 'blueprint_added_to_issue',
-            issue_number: issueNumber,
+            issue_number: issue.number,
             blueprint_url: blueprintUrl,
           })
         );
@@ -964,7 +661,7 @@ const reportHandler = async (req, res) => {
           JSON.stringify({
             t: new Date().toISOString(),
             level: 'error',
-            msg: 'failed_to_push_blueprint',
+            msg: 'failed_to_push_blueprint_to_github',
             error: err.message,
           })
         );
@@ -973,8 +670,9 @@ const reportHandler = async (req, res) => {
 
     res.json({
       success: true,
-      issue_url: issueUrl,
-      issue_number: issueNumber,
+      issue_url: issue.html_url,
+      issue_number: issue.number,
+      // Debug logs are stored as a Gist on GitHub
       debug_logs_url: debugLogsUrl || null,
       blueprint_url: blueprintUrl || null,
     });
@@ -997,8 +695,7 @@ const reportHandler = async (req, res) => {
       return res.status(400).json({ error: err.message });
     }
 
-    const platformName = PLATFORM === 'gitlab' ? 'GitLab' : 'GitHub';
-    res.status(status).json({ error: `Failed to create ${platformName} issue` });
+    res.status(status).json({ error: 'Failed to create GitHub issue' });
   }
 };
 
