@@ -27,32 +27,42 @@ cd Ramshackle-Diagnostics
 
 ### 2. Configure Your Platform
 
-Edit `docker-compose.yml` and choose your platform:
+**Option A: Using .env file (Recommended)**
 
-#### For GitLab (Default)
-```yaml
-environment:
-  - PLATFORM=gitlab
-  - GITLAB_TOKEN=your_gitlab_token_here
-  - GITLAB_URL=https://git.ramshacklegame.com
-  - GITLAB_PROJECT_ID=mountainous-development/Ramshackle_Issues
+Copy the example file and edit it:
+```bash
+cp .env.example .env
+nano .env  # or use your preferred editor
 ```
 
-**To create a GitLab Personal Access Token:**
+For GitLab (default):
+```env
+PLATFORM=gitlab
+GITLAB_TOKEN=your_gitlab_token_here
+GITLAB_URL=https://git.ramshacklegame.com
+GITLAB_PROJECT_ID=mountainous-development/Ramshackle_Issues
+```
+
+For GitHub:
+```env
+PLATFORM=github
+GITHUB_TOKEN=your_github_token_here
+GITHUB_REPO=Sterikworks/Ramshackle_Issues
+```
+
+**Option B: Edit docker-compose.yml directly**
+
+Alternatively, you can edit the environment variables directly in `docker-compose.yml`.
+
+#### Creating Tokens:
+
+**GitLab Personal Access Token:**
 1. Go to your GitLab instance (e.g., `https://git.ramshacklegame.com`)
 2. Navigate to **Settings → Access Tokens**
 3. Create a token with `api` scope
 4. Copy the token and paste it as `GITLAB_TOKEN`
 
-#### For GitHub
-```yaml
-environment:
-  - PLATFORM=github
-  - GITHUB_TOKEN=your_github_token_here
-  - GITHUB_REPO=Sterikworks/Ramshackle_Issues
-```
-
-**To create a GitHub Personal Access Token:**
+**GitHub Personal Access Token:**
 1. Go to https://github.com/settings/tokens
 2. Create a token with `repo` scope
 3. Copy the token and paste it as `GITHUB_TOKEN`

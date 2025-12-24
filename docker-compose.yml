@@ -5,25 +5,22 @@ services:
     restart: unless-stopped
     ports:
       - "5000:5000"
-    environment:
-      - NODE_ENV=production
-      - PORT=5000
-      # Platform selection: "github" or "gitlab" (default: github)
-      - PLATFORM=gitlab
-      
-      # GitHub settings (use when PLATFORM=github)
-      - GITHUB_TOKEN=your_github_token_here              # GitHub Personal Access Token (repo scope)
-      - GITHUB_REPO=Sterikworks/Ramshackle_Issues        # GitHub repo (owner/repo)
-      
-      # GitLab settings (use when PLATFORM=gitlab)
-      - GITLAB_TOKEN=your_gitlab_token_here              # GitLab Personal Access Token (api scope)
-      - GITLAB_URL=https://git.ramshacklegame.com        # GitLab instance URL (without trailing slash)
-      - GITLAB_PROJECT_ID=mountainous-development/Ramshackle_Issues  # Project path (namespace/project)
+    # Load environment variables from .env file
+    env_file:
+      - .env
+    # You can also override environment variables inline here if needed:
+    # environment:
+    #   - NODE_ENV=production
+    #   - PORT=5000
+    #   - PLATFORM=gitlab
+    #   - GITLAB_TOKEN=your_token_here
+    #   - GITLAB_URL=https://git.ramshacklegame.com
+    #   - GITLAB_PROJECT_ID=namespace/project
     volumes:
       # Persist uploaded files
       - ./uploads:/app/uploads
     healthcheck:
-      test: ["CMD", "node", "-e", "require('http').get('http://localhost:5000/health', (r) => {process.exit(r.statusCode === 200 ? 0 : 1)})"]
+      test: [ "CMD", "node", "-e", "require('http').get('http://localhost:5000/health', (r) => {process.exit(r.statusCode === 200 ? 0 : 1)})" ]
       interval: 30s
       timeout: 3s
       retries: 3
