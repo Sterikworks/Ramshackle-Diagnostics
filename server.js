@@ -657,6 +657,7 @@ async function createGitlabIssue({ title, body, labels }) {
       msg: 'create_issue_success',
       issue_iid: resp.data?.iid,
       issue_url: resp.data?.web_url,
+      labels_returned: resp.data?.labels,
     })
   );
 
