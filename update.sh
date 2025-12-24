@@ -4,6 +4,9 @@
 
 set -e  # Exit on any error
 
+# Make this script executable
+chmod +x "$0"
+
 echo "🛑 Stopping containers..."
 docker compose down
 
