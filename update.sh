@@ -19,7 +19,11 @@ git pull
 echo "🔨 Building Docker image..."
 docker compose build
 
-echo "🚀 Starting containers..."
+echo "� Creating upload subdirectories..."
+mkdir -p uploads/images uploads/logs uploads/blueprints uploads/misc
+chmod -R 777 uploads/
+
+echo "�🚀 Starting containers..."
 docker compose up -d
 
 echo "✅ Update complete!"
