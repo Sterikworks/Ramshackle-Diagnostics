@@ -35,7 +35,7 @@ app.get('/uploads-list', (_req, res) => {
     const listDir = (dir, prefix = '') => {
       const files = [];
       if (!fs.existsSync(dir)) return files;
-      
+
       const entries = fs.readdirSync(dir);
       entries.forEach(entry => {
         const fullPath = path.join(dir, entry);
@@ -48,7 +48,7 @@ app.get('/uploads-list', (_req, res) => {
       });
       return files;
     };
-    
+
     const files = listDir(uploadDir);
     res.json({ upload_dir: uploadDir, files });
   } catch (err) {
@@ -61,28 +61,28 @@ app.get('/download/:type/:filename', (req, res) => {
   try {
     const { type, filename } = req.params;
     const validTypes = ['blueprints', 'logs', 'images', 'misc'];
-    
+
     if (!validTypes.includes(type)) {
       return res.status(400).json({ error: 'Invalid file type' });
     }
-    
+
     // Prevent directory traversal
     if (filename.includes('..') || filename.includes('/')) {
       return res.status(400).json({ error: 'Invalid filename' });
     }
-    
+
     const filePath = path.join(uploadDir, type, filename);
-    
+
     // Verify file exists and is within uploads directory
     if (!fs.existsSync(filePath)) {
       return res.status(404).json({ error: 'File not found' });
     }
-    
+
     const realPath = fs.realpathSync(filePath);
     if (!realPath.startsWith(fs.realpathSync(uploadDir))) {
       return res.status(400).json({ error: 'Invalid file path' });
     }
-    
+
     res.download(filePath);
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -231,7 +231,7 @@ const storage = multer.diskStorage({
   destination: (_req, file, cb) => {
     let subdir = 'misc';
     const ext = path.extname(file.originalname).toLowerCase();
-    
+
     if (['.png', '.jpg', '.jpeg', '.gif', '.webp'].includes(ext)) {
       subdir = 'images';
     } else if (['.txt', '.log'].includes(ext)) {
@@ -239,7 +239,7 @@ const storage = multer.diskStorage({
     } else if (ext === '.blueprint') {
       subdir = 'blueprints';
     }
-    
+
     const targetDir = path.join(uploadDir, subdir);
     if (!fs.existsSync(targetDir)) fs.mkdirSync(targetDir, { recursive: true });
     cb(null, targetDir);
@@ -267,13 +267,13 @@ const fileFilter = (_req, file, cb) => {
 const fileSizeFilter = (_req, file, cb) => {
   const ext = path.extname(file.originalname).toLowerCase();
   let limit = FILE_SIZE_LIMITS.screenshots; // default
-  
+
   if (['.txt', '.log'].includes(ext)) {
     limit = FILE_SIZE_LIMITS.logs;
   } else if (ext === '.blueprint') {
     limit = FILE_SIZE_LIMITS.blueprints;
   }
-  
+
   if (file.size > limit) {
     const limitMB = (limit / (1024 * 1024)).toFixed(0);
     const fileMB = (file.size / (1024 * 1024)).toFixed(2);
@@ -281,7 +281,7 @@ const fileSizeFilter = (_req, file, cb) => {
     error.code = 'LIMIT_FILE_SIZE';
     return cb(error);
   }
-  
+
   cb(null);
 };
 
@@ -304,7 +304,7 @@ app.get('/uploads-list', (_req, res) => {
     const listDir = (dir, prefix = '') => {
       const files = [];
       if (!fs.existsSync(dir)) return files;
-      
+
       const entries = fs.readdirSync(dir);
       entries.forEach(entry => {
         const fullPath = path.join(dir, entry);
@@ -317,7 +317,7 @@ app.get('/uploads-list', (_req, res) => {
       });
       return files;
     };
-    
+
     const files = listDir(uploadDir);
     res.json({ upload_dir: uploadDir, files });
   } catch (err) {
@@ -337,10 +337,10 @@ async function pushBlueprintToGithub({ blueprintPath, blueprintName, issueNumber
     // Read blueprint file as base64
     const fileContent = fs.readFileSync(blueprintPath);
     const base64Content = fileContent.toString('base64');
-    
+
     const fileName = `issue-${issueNumber}-${blueprintName}`;
     const filePath = `blueprints/${fileName}`;
-    
+
     console.log(
       JSON.stringify({
         t: new Date().toISOString(),
@@ -350,10 +350,10 @@ async function pushBlueprintToGithub({ blueprintPath, blueprintName, issueNumber
         size: fileContent.length,
       })
     );
-    
+
     // Use GitHub API to create/update file
     const url = `https://api.github.com/repos/${GITHUB_REPO}/contents/${filePath}`;
-    
+
     const resp = await axios.put(
       url,
       {
@@ -369,10 +369,10 @@ async function pushBlueprintToGithub({ blueprintPath, blueprintName, issueNumber
         },
       }
     );
-    
+
     const encodedFilePath = filePath.split('/').map(encodeURIComponent).join('/');
     const githubBlueprintUrl = `https://github.com/${GITHUB_REPO}/blob/main/${encodedFilePath}`;
-    
+
     console.log(
       JSON.stringify({
         t: new Date().toISOString(),
@@ -382,7 +382,7 @@ async function pushBlueprintToGithub({ blueprintPath, blueprintName, issueNumber
         commit: resp.data?.commit?.sha,
       })
     );
-    
+
     return githubBlueprintUrl;
   } catch (err) {
     console.error(
@@ -410,10 +410,10 @@ async function uploadBlueprintToGitlab({ blueprintPath, blueprintName, issueNumb
     // Read blueprint file as base64
     const fileContent = fs.readFileSync(blueprintPath);
     const base64Content = fileContent.toString('base64');
-    
+
     const fileName = `issue-${issueNumber}-${blueprintName}`;
     const filePath = `blueprints/${fileName}`;
-    
+
     console.log(
       JSON.stringify({
         t: new Date().toISOString(),
@@ -423,11 +423,11 @@ async function uploadBlueprintToGitlab({ blueprintPath, blueprintName, issueNumb
         size: fileContent.length,
       })
     );
-    
+
     // URL encode the project ID
     const encodedProjectId = encodeURIComponent(GITLAB_PROJECT_ID);
     const url = `${GITLAB_URL}/api/v4/projects/${encodedProjectId}/repository/files/${encodeURIComponent(filePath)}`;
-    
+
     const resp = await axios.post(
       url,
       {
@@ -443,9 +443,9 @@ async function uploadBlueprintToGitlab({ blueprintPath, blueprintName, issueNumb
         },
       }
     );
-    
+
     const gitlabBlueprintUrl = `${GITLAB_URL}/${GITLAB_PROJECT_ID}/-/blob/main/${filePath}`;
-    
+
     console.log(
       JSON.stringify({
         t: new Date().toISOString(),
@@ -455,7 +455,7 @@ async function uploadBlueprintToGitlab({ blueprintPath, blueprintName, issueNumb
         file_path: resp.data?.file_path,
       })
     );
-    
+
     return gitlabBlueprintUrl;
   } catch (err) {
     console.error(
@@ -525,13 +525,13 @@ async function createGithubGist({ filename, content, description }) {
 // Helper: create GitLab Snippet for debug logs
 // ───────────────────────────────────────────────────────────────────────────────
 async function createGitlabSnippet({ filename, content, description }) {
-  if (!GITLAB_TOKEN || !GITLAB_URL || !GITLAB_PROJECT_ID) {
+  if (!GITLAB_TOKEN || !GITLAB_URL) {
     throw new Error('GitLab configuration missing');
   }
 
-  const encodedProjectId = encodeURIComponent(GITLAB_PROJECT_ID);
-  const url = `${GITLAB_URL}/api/v4/projects/${encodedProjectId}/snippets`;
-  
+  // Use personal snippets instead of project snippets (no Developer role required)
+  const url = `${GITLAB_URL}/api/v4/snippets`;
+
   console.log(
     JSON.stringify({
       t: new Date().toISOString(),
@@ -624,7 +624,7 @@ async function createGitlabIssue({ title, body, labels }) {
 
   const encodedProjectId = encodeURIComponent(GITLAB_PROJECT_ID);
   const url = `${GITLAB_URL}/api/v4/projects/${encodedProjectId}/issues`;
-  
+
   console.log(
     JSON.stringify({
       t: new Date().toISOString(),
@@ -742,7 +742,7 @@ const reportHandler = async (req, res) => {
     // Separate blueprint and debug log files
     let blueprintFile = null;
     let debugLogFile = null;
-    
+
     if (req.files && req.files.length > 0) {
       req.files.forEach(file => {
         if (file.originalname.toLowerCase().endsWith('.blueprint')) {
@@ -777,7 +777,7 @@ const reportHandler = async (req, res) => {
       : (typeof body.labels === 'string' && body.labels.length > 0 ? [body.labels] : []);
     if ((!labels || labels.length === 0) && issueType) labels = [issueType];
     if (!labels || labels.length === 0) labels = ['bug'];
-    
+
     // Add meta labels for screenshot and attachments
     if (screenshotUrl) labels.push('has-screenshot');
     if (blueprintFile) labels.push('has-blueprint');
@@ -785,7 +785,7 @@ const reportHandler = async (req, res) => {
 
     let debugLogsUrl = null;
     let blueprintUrl = null;
-    
+
     // Handle blueprint file
     if (blueprintFile) {
       console.log(
@@ -799,13 +799,13 @@ const reportHandler = async (req, res) => {
         })
       );
     }
-    
+
     // Handle debug logs file
     if (debugLogFile) {
       try {
         // Read the debug logs file
         const debugContent = fs.readFileSync(debugLogFile.path, 'utf-8');
-        
+
         if (PLATFORM === 'github') {
           // Create a Gist for the debug logs
           const gist = await createGithubGist({
@@ -813,9 +813,9 @@ const reportHandler = async (req, res) => {
             content: debugContent,
             description: `Debug logs from bug report: ${title}`,
           });
-          
+
           debugLogsUrl = gist.html_url;
-          
+
           console.log(
             JSON.stringify({
               t: new Date().toISOString(),
@@ -832,9 +832,9 @@ const reportHandler = async (req, res) => {
             content: debugContent,
             description: `Debug logs from bug report: ${title}`,
           });
-          
+
           debugLogsUrl = snippet.web_url;
-          
+
           console.log(
             JSON.stringify({
               t: new Date().toISOString(),
@@ -853,8 +853,12 @@ const reportHandler = async (req, res) => {
             msg: 'failed_to_create_debug_logs',
             filename: debugLogFile?.originalname,
             error: err.message,
+            status: err?.response?.status,
+            response_data: err?.response?.data,
+            response_headers: err?.response?.headers,
           })
         );
+        // On snippet failure, we'll embed logs in the issue description instead
       }
     }
 
@@ -913,7 +917,7 @@ const reportHandler = async (req, res) => {
     } else {
       throw new Error(`Unsupported platform: ${PLATFORM}`);
     }
-    
+
     // Normalize issue response (GitHub uses 'number', GitLab uses 'iid')
     const issueNumber = issue.number || issue.iid;
     const issueUrl = issue.html_url || issue.web_url;
@@ -934,10 +938,10 @@ const reportHandler = async (req, res) => {
             issueNumber,
           });
         }
-        
+
         // Update the issue body to include the blueprint link
         const updatedBody = issueBody + '\n\n**Vessel Blueprint:** [Download](' + blueprintUrl + ')';
-        
+
         if (PLATFORM === 'github') {
           await updateGithubIssue({
             issueNumber,
@@ -949,7 +953,7 @@ const reportHandler = async (req, res) => {
             description: updatedBody,
           });
         }
-        
+
         console.log(
           JSON.stringify({
             t: new Date().toISOString(),
@@ -1047,8 +1051,8 @@ app.use((err, req, res, next) => {
         .join(', ');
       fileTypeInfo = ` - ${oversizedFiles}`;
     }
-    return res.status(413).json({ 
-      error: `File size exceeds 100 MB limit${fileTypeInfo}. Maximum size per file is 100 MB.` 
+    return res.status(413).json({
+      error: `File size exceeds 100 MB limit${fileTypeInfo}. Maximum size per file is 100 MB.`
     });
   }
 
